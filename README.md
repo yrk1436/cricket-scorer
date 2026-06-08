@@ -48,5 +48,34 @@ npm run build
 
 ## Hosting
 
-[Vercel](https://vercel.com) pairs well with Next.js. Add the same env vars there. Remember the Supabase free tier may pause idle projects.
+**Production (Vercel):** [https://cricket-scorer-azure.vercel.app](https://cricket-scorer-azure.vercel.app)
+
+Project name: `cricket-scorer` · team: `roop-yekollus-projects`
+
+### Vercel env vars (already set on deploy)
+
+| Variable | Notes |
+|----------|--------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only |
+| `MATCH_UNLOCK_SECRET` | PIN unlock signing |
+| `NEXT_PUBLIC_SITE_URL` | `https://cricket-scorer-azure.vercel.app` |
+
+Optional: `NEXT_PUBLIC_SUPABASE_ANON_KEY` if you add client-side Supabase later.
+
+Redeploy after env changes: `npx vercel deploy --prod`
+
+### GitHub
+
+Repo name: **`cricket-scorer`** (public). Code is committed on branch `main`.
+
+If GitHub MCP / token is not configured in Cursor, run once locally:
+
+```powershell
+gh auth login
+.\scripts\publish-github.ps1
+npx vercel git connect
+```
+
+[Vercel](https://vercel.com) pairs well with Next.js. Remember the Supabase free tier may pause idle projects.
 
