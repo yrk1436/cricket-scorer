@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mockup — Public scorecard</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <div>
+          <h1>Live score</h1>
+          <p style="margin: 2px 0 0; font-size: 0.68rem; color: var(--muted)">
+            Read-only · safe to share
+          </p>
+        </div>
+        <span class="badge live">Live</span>
+      </header>
+
+      <section class="hero-score glass">
+        <p class="teams">
+          <strong>Sparta XI</strong> vs <strong>Newton CC</strong>
+        </p>
+        <p style="margin: 0; font-size: 0.78rem; color: var(--muted)">20 overs · 2 innings</p>
+      </section>
+
+      <section class="result-banner glass" style="display: none">
+        Newton CC won by 3 wickets
+      </section>
+
+      <section class="innings-card glass">
+        <h3>Innings 1 · Sparta XI <span class="closed">· closed</span></h3>
+        <p class="score-line">185/6 <span style="font-size: 0.85rem; color: var(--muted)">(20.0)</span></p>
+        <div class="stat-grid">
+          <div class="stat-box">
+            <div class="n">9.25</div>
+            <div class="l">Run rate</div>
+          </div>
+          <div class="stat-box">
+            <div class="n">6</div>
+            <div class="l">Wickets</div>
+          </div>
+          <div class="stat-box">
+            <div class="n">120</div>
+            <div class="l">Boundaries</div>
+          </div>
+        </div>
+        <p class="section-title" style="margin-top: 16px">Last balls</p>
+        <div class="orbit-strip">
+          <div class="ball run">4</div>
+          <div class="ball run">1</div>
+          <div class="ball run">2</div>
+          <div class="ball dot">0</div>
+          <div class="ball run">6</div>
+        </div>
+      </section>
+
+      <section class="innings-card glass">
+        <h3>Innings 2 · Newton CC</h3>
+        <p class="score-line">142/3 <span style="font-size: 0.85rem; color: var(--muted)">(15.2)</span></p>
+        <div class="chase-bar" style="margin: 0">Need 44 from 28 balls · RRR 9.4</div>
+        <p class="section-title" style="margin-top: 16px">Last balls</p>
+        <div class="orbit-strip">
+          <div class="ball run">1</div>
+          <div class="ball dot">0</div>
+          <div class="ball run">4</div>
+          <div class="ball wide">wd</div>
+          <div class="ball run">2</div>
+        </div>
+        <p style="margin: 14px 0 0; font-size: 0.75rem; color: var(--muted)">
+          Strike: R. Patel · Non: J. Singh · Bowler: M. Khan
+        </p>
+      </section>
+
+      <div class="toolbar">
+        <button type="button" class="primary">Copy scorecard</button>
+        <button type="button">Print / PDF</button>
+      </div>
+    </div>
+  </body>
+</html>

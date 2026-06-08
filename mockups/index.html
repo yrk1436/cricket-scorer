@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cricket scorer — UI mockups</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+    <nav class="mock-nav">
+      <a href="index.html" class="active">Overview</a>
+      <a href="live-scorer.html">Live scorer</a>
+      <a href="create-match.html">Create match</a>
+      <a href="public-scorecard.html">Public scorecard</a>
+    </nav>
+
+    <header style="text-align: center; padding: 32px 16px 8px">
+      <p class="badge" style="display: inline-block">Pure HTML/CSS mockups</p>
+      <h1 style="margin: 12px 0 8px; font-size: 1.75rem; letter-spacing: -0.03em">
+        Cricket scorer UI direction
+      </h1>
+      <p style="max-width: 520px; margin: 0 auto; color: var(--muted); font-size: 0.9rem">
+        Inspired by live-score apps (CricHeroes, cricket.com): big score first, card layout,
+        ball chips, thumb-friendly pad — not a copy of any product.
+      </p>
+    </header>
+
+    <div class="preview-grid">
+      <div class="preview-frame">
+        <div class="preview-label">① Live scorer (secret link)</div>
+        <iframe src="live-scorer.html" title="Live scorer mockup"></iframe>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-label">② Create match</div>
+        <iframe src="create-match.html" title="Create match mockup"></iframe>
+      </div>
+      <div class="preview-frame">
+        <div class="preview-label">③ Public read-only scorecard</div>
+        <iframe src="public-scorecard.html" title="Public scorecard mockup"></iframe>
+      </div>
+    </div>
+
+    <section class="inspiration-note">
+      <h2>Design choices (from research)</h2>
+      <ul>
+        <li>
+          <strong>Inverted pyramid</strong> — score + overs visible in the first glance; details below
+          (cricket.com pattern).
+        </li>
+        <li>
+          <strong>Card-based sections</strong> — hero score, crease, last balls, scoring pad as separate
+          glass cards (CricHeroes-style clarity).
+        </li>
+        <li>
+          <strong>Large circular run buttons</strong> — one-hand scoring; extras/wicket as labeled chips.
+        </li>
+        <li>
+          <strong>Colored ball orbits</strong> — runs green, extras amber, wickets red, strike-swap blue.
+        </li>
+        <li>
+          <strong>Dark pitch theme</strong> — reduces glare outdoors; high contrast for numbers (mono font).
+        </li>
+      </ul>
+      <p style="margin-top: 16px">
+        Open any mockup full-screen:
+        <a href="live-scorer.html">live-scorer.html</a> ·
+        <a href="create-match.html">create-match.html</a> ·
+        <a href="public-scorecard.html">public-scorecard.html</a>
+      </p>
+    </section>
+  </body>
+</html>

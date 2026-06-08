@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cricket scorer
 
-## Getting Started
+Small Next.js app: create a match, score on the **secret write URL**, share the **public read-only URL** (`/m/{public_id}`). After you mark the match complete, further edits require the scorer PIN again (stored as hash; unlock uses an HttpOnly cookie).
 
-First, run the development server:
+The **Sparta club website** (events, RSVPs, marketing, admin) lives in a separate project: `C:\Roop\Code\hobby\sparta-club-portal`.
+
+## Setup
+
+1. Copy [.env.example](.env.example) to `.env.local`.
+2. In [Supabase](https://supabase.com/dashboard): Project Settings → API — set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (**server-only**, never expose to the browser bundle in client components).
+3. Set `MATCH_UNLOCK_SECRET` to a long random string (e.g. `openssl rand -hex 32`).
+4. Optional `NEXT_PUBLIC_SITE_URL` — used for nicer absolute links locally and in production ([Vercel](https://vercel.com) deploy URL).
+
+### Database (Supabase)
+
+**Project:** `cric-score` · ref `lojomuhczvxyouudassi` (must match `NEXT_PUBLIC_SUPABASE_URL`).
+
+Full setup steps (MCP, SQL Editor, verify): **[supabase/README.md](supabase/README.md)**
+
+**First-time migration (reusable, idempotent):** run  
+[`supabase/migrations/001_cricket_scorer_initial.sql`](supabase/migrations/001_cricket_scorer_initial.sql)  
+in the Supabase SQL Editor, or via Supabase MCP `apply_migration` with name `cricket_scorer_initial`.
+
+After the project is **active** and migration is applied:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run db:verify
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## UI mockups (HTML/CSS)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Static design previews — open in a browser (no build step):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- [`mockups/index.html`](mockups/index.html) — overview + side-by-side previews
+- [`mockups/live-scorer.html`](mockups/live-scorer.html) — scoring pad + hero score
+- [`mockups/create-match.html`](mockups/create-match.html) — setup form
+- [`mockups/public-scorecard.html`](mockups/public-scorecard.html) — read-only view
 
-## Learn More
+Inspired by common live-score patterns (big score first, card layout, ball chips, thumb-friendly pad). Not wired to the app yet.
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+npm run dev
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Hosting
 
-## Deploy on Vercel
+[Vercel](https://vercel.com) pairs well with Next.js. Add the same env vars there. Remember the Supabase free tier may pause idle projects.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

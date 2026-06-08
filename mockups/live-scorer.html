@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mockup — Live scorer</title>
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      .crease-bar {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 8px;
+        align-items: stretch;
+      }
+      .crease-swap {
+        align-self: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 1px solid rgba(56, 189, 248, 0.5);
+        background: rgba(12, 74, 110, 0.45);
+        color: #bae6fd;
+        font-size: 1.1rem;
+        cursor: pointer;
+      }
+      .bowler-line {
+        margin-top: 8px;
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+        font-size: 0.75rem;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+      }
+      .bowler-line b {
+        color: var(--text);
+      }
+      .action-row.two-up {
+        grid-template-columns: 1fr 1fr;
+      }
+      .chip-btn.extras {
+        border-color: rgba(251, 191, 36, 0.45);
+        color: #fde68a;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <div>
+          <h1>Scoring</h1>
+          <p style="margin: 2px 0 0; font-size: 0.68rem; color: var(--muted)">
+            Secret link · do not share
+          </p>
+        </div>
+        <span class="badge live">Live</span>
+      </header>
+
+      <section class="hero-score glass">
+        <p class="teams">
+          <strong>Sparta XI</strong> vs <strong>Newton CC</strong>
+        </p>
+        <p class="big">142/3</p>
+        <p style="margin: 0; font-family: var(--mono); font-size: 0.85rem; color: var(--muted)">
+          15.2 overs · RR 9.26
+        </p>
+        <div class="meta">
+          <span>Target <b>186</b></span>
+          <span>Need <b>44</b> off 28</span>
+          <span>RRR <b>9.4</b></span>
+        </div>
+        <div class="chase-bar">Innings 2 · Newton CC batting · 4 wickets left</div>
+      </section>
+
+      <section>
+        <div class="crease-bar">
+          <div class="crease-pill striker">
+            <div class="label">Striker</div>
+            <div class="name">R. Patel</div>
+            <div class="runs-mini">38 (24)</div>
+          </div>
+          <button type="button" class="crease-swap" title="Swap strike">⇄</button>
+          <div class="crease-pill">
+            <div class="label">Non-striker</div>
+            <div class="name">J. Singh</div>
+            <div class="runs-mini">12 (9)</div>
+          </div>
+        </div>
+        <div class="bowler-line">
+          <span>Bowler: <b>M. Khan</b></span>
+          <span style="font-family: var(--mono)">Over ball 2</span>
+        </div>
+      </section>
+
+      <section class="glass" style="padding: 14px 16px">
+        <p class="section-title">Last 10 balls</p>
+        <div class="orbit-strip">
+          <div class="ball run">1</div>
+          <div class="ball dot">0</div>
+          <div class="ball run">4</div>
+          <div class="ball wide">wd</div>
+          <div class="ball run">2</div>
+          <div class="ball wicket">W</div>
+          <div class="ball swap">⇄</div>
+          <div class="ball run">6</div>
+          <div class="ball nb">nb</div>
+          <div class="ball run">1</div>
+        </div>
+      </section>
+
+      <div class="toolbar">
+        <button type="button">Undo</button>
+        <button type="button">Close innings</button>
+        <button type="button" class="primary">Share read-only ↗</button>
+      </div>
+
+      <section class="pad-card glass">
+        <h2>Record ball</h2>
+        <div class="run-grid">
+          <button type="button" class="run-btn">1</button>
+          <button type="button" class="run-btn">2</button>
+          <button type="button" class="run-btn">3</button>
+          <button type="button" class="run-btn">4</button>
+          <button type="button" class="run-btn six">6</button>
+          <button type="button" class="run-btn zero">0</button>
+        </div>
+        <div class="action-row two-up">
+          <button type="button" class="chip-btn extras">Extras…</button>
+          <button type="button" class="chip-btn wicket">Wicket…</button>
+        </div>
+        <p style="margin: 10px 0 0; font-size: 0.68rem; color: var(--muted)">
+          Extras opens wide (wd+1…4), no-ball (nb, nb+1…6), byes, leg-byes.
+          Wicket opens dismissal type, fielders, run-out options.
+        </p>
+      </section>
+    </div>
+  </body>
+</html>

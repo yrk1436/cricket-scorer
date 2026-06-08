@@ -1,0 +1,916 @@
+/* Cricket scorer — live app theme (from mockups/shared.css) */
+
+.cricket-app {
+  --bg-deep: #071812;
+  --bg-card: rgba(255, 255, 255, 0.06);
+  --bg-card-solid: #122820;
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #f0fdf4;
+  --muted: rgba(240, 253, 244, 0.62);
+  --accent: #34d399;
+  --accent-dim: rgba(52, 211, 153, 0.15);
+  --runs: #10b981;
+  --wicket: #f87171;
+  --extra: #fbbf24;
+  --swap: #38bdf8;
+  --illegal: #a78bfa;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+  --font: var(--font-dm-sans), system-ui, sans-serif;
+  --mono: var(--font-jetbrains), ui-monospace, monospace;
+  --phone-w: 420px;
+
+  min-height: 100vh;
+  font-family: var(--font);
+  color: var(--text);
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(52, 211, 153, 0.18), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.08), transparent 40%),
+    var(--bg-deep);
+  line-height: 1.45;
+  color-scheme: dark;
+}
+
+.cricket-app a {
+  color: var(--accent);
+}
+
+.cricket-app .phone-shell {
+  width: min(100%, var(--phone-w));
+  margin: 0 auto;
+  min-height: 100vh;
+  padding:
+    12px
+    max(14px, env(safe-area-inset-right))
+    max(28px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cricket-app .phone-shell-wide {
+  --phone-w: 720px;
+}
+
+.cricket-app .glass {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.cricket-app .top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 2px 8px;
+}
+
+.cricket-app .top-bar h1 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.cricket-app .top-bar .sub {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.cricket-app .badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.cricket-app .badge.live {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.cricket-app .badge.live::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  margin-right: 5px;
+  animation: cricket-pulse 1.4s ease infinite;
+}
+
+.cricket-app .badge.done {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+@keyframes cricket-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.cricket-app .hero-score {
+  padding: 20px 18px 16px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.cricket-app .hero-score .teams {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.cricket-app .hero-score .teams strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cricket-app .hero-score .big {
+  font-family: var(--mono);
+  font-size: 2.75rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 8px 0;
+}
+
+.cricket-app .hero-score .overs-line {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.cricket-app .hero-score .meta {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 10px;
+}
+
+.cricket-app .hero-score .meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cricket-app .chase-bar {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  font-size: 0.78rem;
+  color: #fde68a;
+}
+
+.cricket-app .chase-bar.warn {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fecaca;
+}
+
+.cricket-app .chase-bar.ok {
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.3);
+  color: #a7f3d0;
+}
+
+.cricket-app .crease-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.cricket-app .crease-pill {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border);
+}
+
+.cricket-app .crease-pill.striker {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(6, 78, 59, 0.35);
+}
+
+.cricket-app .crease-pill .label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.cricket-app .crease-pill.striker .label {
+  color: rgba(167, 243, 208, 0.75);
+}
+
+.cricket-app .crease-pill .name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cricket-app .crease-pill .runs-mini {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+.cricket-app .crease-swap {
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  background: rgba(12, 74, 110, 0.45);
+  color: #bae6fd;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s;
+}
+
+.cricket-app .crease-swap:hover:not(:disabled) {
+  transform: scale(1.05);
+  background: rgba(12, 74, 110, 0.65);
+}
+
+.cricket-app .crease-swap:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cricket-app .bowler-line {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.cricket-app .bowler-line b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cricket-app .section-title {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 8px 2px;
+}
+
+.cricket-app .orbit-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  scrollbar-width: none;
+}
+
+.cricket-app .orbit-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.cricket-app .ball {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+}
+
+.cricket-app .ball.run {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #a7f3d0;
+}
+
+.cricket-app .ball.dot {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--muted);
+}
+
+.cricket-app .ball.wide,
+.cricket-app .ball.nb,
+.cricket-app .ball.extra {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.55);
+  color: #fde68a;
+}
+
+.cricket-app .ball.bye {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.45);
+  color: #ddd6fe;
+}
+
+.cricket-app .ball.wicket {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: rgba(248, 113, 113, 0.6);
+  color: #fecaca;
+}
+
+.cricket-app .ball.swap {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #bae6fd;
+}
+
+.cricket-app .pad-card {
+  padding: 16px;
+  margin-top: auto;
+}
+
+.cricket-app .pad-card h2 {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cricket-app .run-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cricket-app .run-btn {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: transform 0.12s, background 0.12s;
+}
+
+.cricket-app .run-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  background: var(--accent-dim);
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+.cricket-app .run-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cricket-app .run-btn.six {
+  background: linear-gradient(145deg, rgba(52, 211, 153, 0.35), rgba(16, 185, 129, 0.15));
+  border-color: var(--accent);
+}
+
+.cricket-app .run-btn.zero {
+  color: var(--muted);
+}
+
+.cricket-app .action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cricket-app .chip-btn {
+  padding: 11px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card-solid);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.cricket-app .chip-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cricket-app .chip-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cricket-app .chip-btn.extras {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+}
+
+.cricket-app .chip-btn.wicket {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}
+
+.cricket-app .toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cricket-app .toolbar button,
+.cricket-app .toolbar a {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cricket-app .toolbar button:hover:not(:disabled),
+.cricket-app .toolbar a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cricket-app .toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cricket-app .toolbar button.primary,
+.cricket-app .toolbar a.primary {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.cricket-app .form-card {
+  padding: 18px;
+}
+
+.cricket-app .form-card h2 {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+  letter-spacing: -0.03em;
+}
+
+.cricket-app .form-card .sub {
+  margin: 0 0 18px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.cricket-app .field {
+  margin-bottom: 14px;
+}
+
+.cricket-app .field label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.cricket-app .field input,
+.cricket-app .field select,
+.cricket-app .field textarea,
+.cricket-app .input-select {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card-solid);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.cricket-app .field select option {
+  background: var(--bg-card-solid);
+  color: var(--text);
+}
+
+.cricket-app .field textarea {
+  min-height: 120px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  resize: vertical;
+}
+
+.cricket-app .field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cricket-app .btn-primary {
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, #34d399, #059669);
+  color: #022c22;
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(52, 211, 153, 0.25);
+}
+
+.cricket-app .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cricket-app .innings-card {
+  padding: 16px;
+}
+
+.cricket-app .innings-card h3 {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.cricket-app .innings-card .score-line {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 8px 0 12px;
+}
+
+.cricket-app .innings-card .closed {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.cricket-app .result-banner {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(5, 150, 105, 0.08));
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cricket-app .admin-panel {
+  padding: 14px 16px;
+}
+
+.cricket-app .admin-panel summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  list-style: none;
+}
+
+.cricket-app .admin-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.cricket-app .error-banner {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+  font-size: 0.82rem;
+}
+
+.cricket-app .hud-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.65);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  overscroll-behavior: contain;
+}
+
+.cricket-app .hud-sheet {
+  width: 100%;
+  max-width: 32rem;
+  max-height: min(90vh, calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: var(--shadow);
+  outline: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 640px) {
+  .cricket-app .hud-overlay {
+    align-items: center;
+  }
+
+  .cricket-app .hud-sheet {
+    border-radius: var(--radius);
+    max-height: min(85vh, calc(100dvh - 48px));
+  }
+}
+
+.cricket-app .hud-title {
+  margin: 0;
+  padding: 16px 16px 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+
+.cricket-app .hud-body {
+  padding: 12px 16px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cricket-app .hud-panel {
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.cricket-app .hud-panel .field label,
+.cricket-app .hud-panel .text-xs,
+.cricket-app .picker-label {
+  color: var(--muted);
+}
+
+.cricket-app .hud-btn {
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cricket-app .hud-btn.primary {
+  background: linear-gradient(135deg, #34d399, #059669);
+  color: #022c22;
+  border: none;
+}
+
+.cricket-app .hud-btn.danger {
+  background: rgba(127, 29, 29, 0.5);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fecaca;
+}
+
+.cricket-app .chip-btn {
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cricket-app .run-btn,
+.cricket-app .crease-swap,
+.cricket-app .toolbar button,
+.cricket-app .toolbar a,
+.cricket-app .btn-primary {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tap-to-pick (modals) — avoids native select issues on iOS in overlays */
+.cricket-app .picker-field {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.cricket-app .picker-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.cricket-app .picker-trigger {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card-solid);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 1rem;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cricket-app .picker-placeholder {
+  color: var(--muted);
+}
+
+.cricket-app .picker-chevron {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.cricket-app .picker-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: min(40vh, 280px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.35);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.cricket-app .picker-option {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cricket-app .picker-option:last-child {
+  border-bottom: none;
+}
+
+.cricket-app .picker-option.selected,
+.cricket-app .picker-option:active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.cricket-app .picker-field-open .picker-trigger {
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+.cricket-app .touch-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cricket-app .touch-choice-btn {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cricket-app .touch-choice-btn.selected {
+  border-color: rgba(52, 211, 153, 0.5);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.cricket-app .run-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cricket-app .run-pick-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.cricket-app .run-pick-btn.selected {
+  border-color: rgba(52, 211, 153, 0.5);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* iOS: 16px+ inputs prevent focus zoom */
+.cricket-app .field input,
+.cricket-app .field select,
+.cricket-app .field textarea,
+.cricket-app .input-select {
+  font-size: max(16px, 0.9rem);
+  min-height: 44px;
+}
+
+.cricket-app .field textarea {
+  min-height: 120px;
+  font-size: max(14px, 0.78rem);
+}
+
+.cricket-app .field select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23a7f3d0' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+@media (max-width: 400px) {
+  .cricket-app .field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .cricket-app {
+    background: #fff;
+    color: #000;
+  }
+}

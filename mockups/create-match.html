@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mockup — Create match</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+    <div class="phone-shell">
+      <header class="top-bar">
+        <h1>New match</h1>
+        <span class="badge">Setup</span>
+      </header>
+
+      <section class="form-card glass">
+        <h2>Start scoring</h2>
+        <p class="sub">Two innings · PIN only after the match finishes</p>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="team-a">Team A</label>
+            <input id="team-a" type="text" value="Sparta XI" />
+          </div>
+          <div class="field">
+            <label for="team-b">Team B</label>
+            <input id="team-b" type="text" value="Newton CC" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="overs">Overs / innings</label>
+            <input id="overs" type="number" value="20" />
+          </div>
+          <div class="field">
+            <label for="wkts">Max wickets</label>
+            <input id="wkts" type="number" value="10" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="toss-win">Toss won by</label>
+            <select id="toss-win">
+              <option>Team A</option>
+              <option>Team B</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="toss-elect">Elects to</label>
+            <select id="toss-elect">
+              <option>Bat</option>
+              <option>Bowl</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="pin">PIN (min 4)</label>
+            <input id="pin" type="password" value="1234" />
+          </div>
+          <div class="field">
+            <label for="pin2">Confirm PIN</label>
+            <input id="pin2" type="password" value="1234" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="squad-a">Squad A — one name per line</label>
+          <textarea id="squad-a">R. Patel
+J. Singh
+A. Kumar
+…</textarea>
+        </div>
+
+        <div class="field">
+          <label for="squad-b">Squad B — one name per line</label>
+          <textarea id="squad-b">M. Khan
+S. Ali
+…</textarea>
+        </div>
+
+        <button type="button" class="btn-primary">Create &amp; open scorer</button>
+      </section>
+
+      <p style="font-size: 0.72rem; color: var(--muted); text-align: center; margin: 0">
+        Mockup only — buttons are not wired
+      </p>
+    </div>
+  </body>
+</html>

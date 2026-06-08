@@ -1,10 +1,14 @@
 import CreateMatchForm from "@/components/CreateMatchForm";
 import { getRequestOrigin } from "@/lib/site-origin";
 
-export default async function Home() {
+export const metadata = {
+  title: "New match | Sparta Cricket Club",
+};
+
+export default async function ScorerPage() {
   const origin = await getRequestOrigin();
   return (
-    <main className="min-h-screen">
+    <main className="bg-[var(--background)]">
       <CreateMatchForm origin={origin} />
     </main>
   );
