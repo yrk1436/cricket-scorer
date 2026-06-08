@@ -67,15 +67,22 @@ Redeploy after env changes: `npx vercel deploy --prod`
 
 ### GitHub
 
-Repo name: **`cricket-scorer`** (public). Code is committed on branch `main`.
+Repo: **`yrk1436/cricket-scorer`** (public) · branch `main`
 
-If GitHub MCP / token is not configured in Cursor, run once locally:
+If the repo is not created yet, either:
+
+1. Open [github.com/new?name=cricket-scorer](https://github.com/new?name=cricket-scorer&description=Informal+cricket+scoring+Next.js+Supabase) and click **Create repository**, or  
+2. In Cursor → MCP → GitHub, ensure the token can **create repositories** (classic `repo` scope or fine-grained Administration write).
+
+Then push from this folder:
 
 ```powershell
-gh auth login
-.\scripts\publish-github.ps1
+git remote set-url origin https://github.com/yrk1436/cricket-scorer.git
+git push -u origin main
 npx vercel git connect
 ```
+
+Or run `.\scripts\publish-github.ps1` after `gh auth login`.
 
 [Vercel](https://vercel.com) pairs well with Next.js. Remember the Supabase free tier may pause idle projects.
 
