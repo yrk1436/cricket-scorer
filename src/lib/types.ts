@@ -22,6 +22,8 @@ export type DbMatch = {
   team_a_name: string;
   team_b_name: string;
   overs_per_innings: number;
+  /** Max deliveries per over (legal + extras). 0 = unlimited until 6 legal. */
+  max_balls_per_over?: number;
   max_wickets: number;
   innings_count: number;
   toss_winner: TeamSide;

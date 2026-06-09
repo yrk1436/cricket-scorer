@@ -16,6 +16,8 @@ type PlayerPick = { id: string; display_name: string };
 type Props = {
   open: boolean;
   onClose: () => void;
+  /** Shown inside the modal when Record wicket fails (page banner is hidden behind overlay). */
+  error?: string | null;
   busy?: boolean;
   strikerId: string;
   nonStrikerId: string;
@@ -29,6 +31,7 @@ type Props = {
 export default function WicketHud({
   open,
   onClose,
+  error,
   busy,
   strikerId,
   nonStrikerId,
@@ -102,7 +105,7 @@ export default function WicketHud({
   function confirm() {
     if (!option) return;
     if (option.needsFielder && !fielderId) return;
-    if (!option.retiresInPlace && !incomingId) return;
+    if (!incomingId) return;
 
     onSubmit({
       runsOffBat: option.allowRuns ? runsOffBat : 0,
@@ -117,12 +120,17 @@ export default function WicketHud({
       fielderId: option.needsFielder ? fielderId : undefined,
       fielderAssistId:
         option.id === "run_out" && fielderAssistId ? fielderAssistId : undefined,
-      incomingStrikerId: option.retiresInPlace ? undefined : incomingId,
+      incomingStrikerId: incomingId,
     });
   }
 
   return (
     <HudModal open={open} title="Wicket" onBackdropClick={onClose}>
+      {error ? (
+        <div className="error-banner mb-3" role="alert">
+          {error}
+        </div>
+      ) : null}
       {step === "type" ? (
         <>
           <p className="mb-3 text-sm opacity-85">How was the batter out?</p>
@@ -233,17 +241,27 @@ export default function WicketHud({
             </div>
           )}
 
-          {!option?.retiresInPlace && (
-            <PickerField
-              label="Incoming batter"
-              value={incomingId}
-              onChange={setIncomingId}
-              options={incomingOptions}
-              placeholder="Select…"
-              required
-              disabled={busy}
-            />
+          {option?.notOut && (
+            <p className="mb-3 text-sm text-emerald-300/90">
+              Retired not out — wicket count unchanged; this batter can return
+              later in the innings.
+            </p>
           )}
+          {option?.id === "retired_out" && (
+            <p className="mb-3 text-sm opacity-85">
+              Retired out — counts as a wicket.
+            </p>
+          )}
+
+          <PickerField
+            label="Incoming batter"
+            value={incomingId}
+            onChange={setIncomingId}
+            options={incomingOptions}
+            placeholder="Select…"
+            required
+            disabled={busy}
+          />
 
           <div className="flex gap-2 pt-2">
             <button
@@ -258,7 +276,7 @@ export default function WicketHud({
               disabled={
                 busy ||
                 (option?.needsFielder && !fielderId) ||
-                (!option?.retiresInPlace && !incomingId)
+                !incomingId
               }
               className="hud-btn danger flex-1 disabled:opacity-40"
               onClick={() => confirm()}

@@ -21,6 +21,7 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
   const [teamA, setTeamA] = useState("Team A");
   const [teamB, setTeamB] = useState("Team B");
   const [overs, setOvers] = useState(20);
+  const [maxBallsOver, setMaxBallsOver] = useState(0);
   const [maxWk, setMaxWk] = useState(10);
   const [tossWin, setTossWin] = useState<"a" | "b">("a");
   const [tossElect, setTossElect] = useState<"bat" | "bowl">("bat");
@@ -41,6 +42,7 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
           teamAName: teamA,
           teamBName: teamB,
           oversPerInnings: overs,
+          maxBallsPerOver: maxBallsOver,
           maxWickets: maxWk,
           inningsCount: 2,
           tossWinner: tossWin,
@@ -121,6 +123,22 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
               onChange={(e) => setMaxWk(Number(e.target.value) || 1)}
             />
           </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="max-balls-over">Max balls per over (0 = no cap)</label>
+          <input
+            id="max-balls-over"
+            type="number"
+            min={0}
+            max={30}
+            value={maxBallsOver}
+            onChange={(e) => setMaxBallsOver(Number(e.target.value) || 0)}
+          />
+          <p className="text-xs opacity-60" style={{ marginTop: 6 }}>
+            Kids games: 8 or 10 limits wides/no-balls. Over still ends at 6 legal
+            balls.
+          </p>
         </div>
 
         <div className="field-row">

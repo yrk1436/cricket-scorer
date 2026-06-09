@@ -1,11 +1,11 @@
 import type { DeliveryInput } from "@/lib/match-service";
 import type { DismissalType } from "@/lib/types";
 
-/** Wide: total wide runs (not legal). wd+2 → extraWide=2 */
-export function wideDelivery(extraWide: number): Omit<DeliveryInput, "bowlerId"> {
+/** Wide: 1 run penalty + optional extras (not legal). wd → 1, wd+1 → 2, etc. */
+export function wideDelivery(additionalRuns: number): Omit<DeliveryInput, "bowlerId"> {
   return {
     runsOffBat: 0,
-    extraWide,
+    extraWide: 1 + additionalRuns,
     extraNb: 0,
     extraByes: 0,
     extraLegByes: 0,
@@ -63,8 +63,8 @@ export type DismissalOption = {
   allowNonStrikerOut?: boolean;
   /** Runs may be scored on this ball before/out during dismissal */
   allowRuns?: boolean;
-  /** Does not require incoming batter pick (striker just leaves) */
-  retiresInPlace?: boolean;
+  /** Does not count as a wicket (retired not out) */
+  notOut?: boolean;
 };
 
 export const DISMISSAL_OPTIONS: DismissalOption[] = [
@@ -74,12 +74,13 @@ export const DISMISSAL_OPTIONS: DismissalOption[] = [
   { id: "stumped", label: "Stumped", needsFielder: true },
   { id: "run_out", label: "Run out", needsFielder: true, allowNonStrikerOut: true, allowRuns: true },
   { id: "hit_wicket", label: "Hit wicket", needsFielder: false },
-  { id: "retired_out", label: "Retired out", needsFielder: false, retiresInPlace: true },
-  { id: "retired_hurt", label: "Retired hurt", needsFielder: false, retiresInPlace: true },
+  { id: "retired_out", label: "Retired out", needsFielder: false },
+  { id: "retired_hurt", label: "Retired not out", needsFielder: false, notOut: true },
   { id: "other", label: "Other", needsFielder: false },
 ];
 
-export const WIDE_PRESETS = [1, 2, 3, 4] as const;
+/** Additional runs on top of the 1-run wide penalty (0 = plain wd). */
+export const WIDE_PRESETS = [0, 1, 2, 3, 4] as const;
 export const NO_BALL_BAT_RUNS = [0, 1, 2, 3, 4, 6] as const;
 export const BYE_PRESETS = [0, 1, 2, 3, 4] as const;
 export const LEG_BYE_PRESETS = [0, 1, 2, 3, 4] as const;

@@ -277,11 +277,52 @@
   color: var(--muted);
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.cricket-app .bowler-line--pick {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.1);
 }
 
 .cricket-app .bowler-line b {
   color: var(--text);
   font-weight: 600;
+}
+
+.cricket-app .bowler-unset {
+  color: #fde68a;
+  font-style: italic;
+}
+
+.cricket-app .bowler-pick-link {
+  font-weight: 700;
+  color: #fde68a;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cricket-app .bowler-pick-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.65);
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cricket-app .bowler-pick-btn:hover {
+  background: rgba(251, 191, 36, 0.32);
 }
 
 .cricket-app .section-title {
@@ -293,29 +334,41 @@
   margin: 0 0 8px 2px;
 }
 
+.cricket-app .section-title-sub {
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 0.35em;
+}
+
+/* Last 10: 5×2 grid. Current over: 5 columns, up to 3 rows (extras-heavy overs). */
 .cricket-app .orbit-strip {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 4px 2px 8px;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  padding: 2px 0 4px;
 }
 
-.cricket-app .orbit-strip::-webkit-scrollbar {
-  display: none;
+.cricket-app .orbit-strip--over {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  min-height: calc(3 * (52px + 6px));
 }
 
-.cricket-app .ball {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+.cricket-app .orbit-strip .ball {
+  width: 100%;
+  max-width: 52px;
+  height: auto;
+  aspect-ratio: 1;
+  justify-self: center;
   border-radius: 50%;
   display: grid;
   place-items: center;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: clamp(0.58rem, 2.6vw, 0.72rem);
   font-weight: 600;
   border: 2px solid transparent;
+  line-height: 1;
+  padding: 0 2px;
+  text-align: center;
 }
 
 .cricket-app .ball.run {
@@ -330,12 +383,14 @@
   color: var(--muted);
 }
 
-.cricket-app .ball.wide,
-.cricket-app .ball.nb,
-.cricket-app .ball.extra {
+.cricket-app .orbit-strip .ball.wide,
+.cricket-app .orbit-strip .ball.nb,
+.cricket-app .orbit-strip .ball.extra {
   background: rgba(251, 191, 36, 0.2);
   border-color: rgba(251, 191, 36, 0.55);
   color: #fde68a;
+  font-size: clamp(0.5rem, 2.2vw, 0.62rem);
+  letter-spacing: -0.03em;
 }
 
 .cricket-app .ball.bye {

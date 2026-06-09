@@ -8,6 +8,8 @@ type Props = {
   targetInnings: DbInnings | null;
   sideName: (side: "a" | "b") => string;
   allInnings: DbInnings[];
+  /** Live replay totals while scoring (overs tick 0.1, 1.2, 2.3, …). */
+  live?: { runs: number; wickets: number; ballsLegal: number } | null;
 };
 
 function fmtRate(n: number): string {
@@ -20,6 +22,7 @@ export default function HeroScore({
   targetInnings,
   sideName,
   allInnings,
+  live,
 }: Props) {
   const sorted = [...allInnings].sort((a, b) => a.index_num - b.index_num);
   const inn = targetInnings ?? sorted[sorted.length - 1] ?? null;
@@ -37,7 +40,11 @@ export default function HeroScore({
   }
 
   const batting = sideName(inn.batting_side as "a" | "b");
-  const rr = runRate(inn.runs, inn.balls_legal);
+  const useLive = live && !inn.completed && match.status === "live";
+  const runs = useLive ? live.runs : inn.runs;
+  const wickets = useLive ? live.wickets : inn.wickets;
+  const ballsLegal = useLive ? live.ballsLegal : inn.balls_legal;
+  const rr = runRate(runs, ballsLegal);
   const first = sorted[0];
   const isChase = inn.index_num === 2 && !!first && match.innings_count >= 2;
   const chase =
@@ -59,10 +66,10 @@ export default function HeroScore({
         <strong>{match.team_b_name}</strong>
       </p>
       <p className="big">
-        {inn.runs}/{inn.wickets}
+        {runs}/{wickets}
       </p>
       <p className="overs-line">
-        {ballsToOvers(inn.balls_legal)} overs · RR {fmtRate(rr)}
+        {ballsToOvers(ballsLegal)} overs · RR {fmtRate(rr)}
       </p>
 
       {chase && (

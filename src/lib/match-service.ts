@@ -1,7 +1,10 @@
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import {
+  awaitingNewOverBowler,
+  currentOverProgress,
   firstBattingSide,
   lastBowlingDelivery,
+  mustChangeBowlerForDelivery,
   opposite,
   replayInnings,
   summarizeResult,
@@ -128,7 +131,7 @@ async function recomputeAllInningsAndSummary(matchId: string) {
   let bundle = await fetchBundle(m);
   for (const inn of bundle.innings) {
     const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
-    await persistInningsState(inn, bundle.players, dels);
+    await persistInningsState(inn, bundle.players, dels, m.max_balls_per_over ?? 0);
   }
 
   bundle = await fetchBundle(m);
@@ -161,6 +164,7 @@ export async function persistInningsState(
   inn: DbInnings,
   allPlayers: DbPlayer[],
   deliveries: DbDelivery[],
+  maxBallsPerOver = 0,
 ) {
   const strikeSeed =
     deliveries.length === 0 &&
@@ -177,6 +181,7 @@ export async function persistInningsState(
     allPlayers,
     deliveries,
     strikeSeed,
+    maxBallsPerOver,
   );
   if (!sim) throw new Error("Cannot replay innings");
 
@@ -254,7 +259,68 @@ export async function setOpeningLineup(
 
   const refreshed = await fetchBundle(m);
   const realDels = refreshed.deliveriesByInningsId[inn.id] ?? [];
-  await persistInningsState(refreshed.innings.find((x) => x.id === inn.id)!, refreshed.players, realDels);
+  await persistInningsState(
+    refreshed.innings.find((x) => x.id === inn.id)!,
+    refreshed.players,
+    realDels,
+    m.max_balls_per_over ?? 0,
+  );
+}
+
+export async function updateMatchSettings(
+  writeToken: string,
+  patch: UpdateMatchSettingsInput,
+  unlockCookie?: string,
+) {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status === "completed" && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  const updates: Record<string, number> = {};
+  if (patch.maxBallsPerOver !== undefined) {
+    const v = Math.floor(patch.maxBallsPerOver);
+    if (v < 0 || v > 30) throw new Error("Max balls per over must be 0–30 (0 = no cap)");
+    updates.max_balls_per_over = v;
+  }
+  if (patch.oversPerInnings !== undefined) {
+    const v = Math.floor(patch.oversPerInnings);
+    if (v < 1 || v > 200) throw new Error("Overs per innings must be 1–200");
+    if (m.status === "live") {
+      const bundle = await fetchBundle(m);
+      const active = await getActiveInnings(m, bundle.innings);
+      if (active) {
+        const dels = bundle.deliveriesByInningsId[active.id] ?? [];
+        const sim = replayInnings(
+          active.batting_side as TeamSide,
+          bundle.players,
+          dels,
+          null,
+          m.max_balls_per_over ?? 0,
+        );
+        const bowled = sim?.balls_legal ?? 0;
+        const minOvers = Math.max(1, Math.ceil(bowled / 6));
+        if (v < minOvers) {
+          throw new Error(
+            `Innings already at ${Math.floor(bowled / 6)}.${bowled % 6} overs — set at least ${minOvers} overs`,
+          );
+        }
+      }
+    }
+    updates.overs_per_innings = v;
+  }
+  if (patch.maxWickets !== undefined) {
+    const v = Math.floor(patch.maxWickets);
+    if (v < 1 || v > 20) throw new Error("Max wickets must be 1–20");
+    updates.max_wickets = v;
+  }
+
+  if (Object.keys(updates).length === 0) throw new Error("No settings to update");
+
+  const { error } = await sb().from("matches").update(updates).eq("id", m.id);
+  if (error) throw new Error(error.message);
 }
 
 export async function verifyPin(pin: string, pinHash: string) {
@@ -265,6 +331,7 @@ export type CreateMatchInput = {
   teamAName: string;
   teamBName: string;
   oversPerInnings: number;
+  maxBallsPerOver?: number;
   maxWickets: number;
   inningsCount: 1 | 2;
   tossWinner: TeamSide;
@@ -273,6 +340,12 @@ export type CreateMatchInput = {
   pinConfirm: string;
   squadA: string[];
   squadB: string[];
+};
+
+export type UpdateMatchSettingsInput = {
+  maxBallsPerOver?: number;
+  oversPerInnings?: number;
+  maxWickets?: number;
 };
 
 export async function createMatch(input: CreateMatchInput) {
@@ -294,6 +367,7 @@ export async function createMatch(input: CreateMatchInput) {
       team_a_name: input.teamAName.trim(),
       team_b_name: input.teamBName.trim(),
       overs_per_innings: input.oversPerInnings,
+      max_balls_per_over: Math.max(0, input.maxBallsPerOver ?? 0),
       max_wickets: input.maxWickets,
       innings_count: input.inningsCount,
       toss_winner: input.tossWinner,
@@ -429,11 +503,15 @@ export async function appendDelivery(
         }
       : null;
 
+  const maxOver = m.max_balls_per_over ?? 0;
+  const overProg = currentOverProgress(dels, maxOver);
+
   const sim = replayInnings(
     target.batting_side as TeamSide,
     bundle.players,
     dels,
     strikeSeed,
+    maxOver,
   );
   if (!sim) throw new Error("Bad state");
 
@@ -465,27 +543,32 @@ export async function appendDelivery(
       throw new Error("Invalid bowler");
 
     const lastBall = lastBowlingDelivery(dels);
-    const lb = sim.balls_legal;
-    const newOver =
-      dels.length === 0 ||
-      (lb > 0 && lb % 6 === 0);
-    if (
-      lastBall?.bowler_id &&
-      !newOver &&
-      lastBall.bowler_id !== bid
-    )
-      throw new Error(
-        "Same bowler bowls all legal balls until the over ends — pick this bowler until 6 legal are done",
-      );
 
-    if (
-      newOver &&
-      dels.length > 0 &&
-      lastBall?.bowler_id &&
-      bid === lastBall.bowler_id
-    ) {
+    if (mustChangeBowlerForDelivery(dels, sim.balls_legal, bid, maxOver)) {
       throw new Error(
         "Pick a different bowler for the new over — the previous over’s bowler cannot continue",
+      );
+    }
+
+    const inProgressOver = !awaitingNewOverBowler(dels, sim.balls_legal, maxOver);
+    if (
+      inProgressOver &&
+      overProg.legalBalls > 0 &&
+      lastBall?.bowler_id &&
+      lastBall.bowler_id !== bid
+    ) {
+      throw new Error(
+        "Same bowler bowls the whole over — pick this bowler until the over ends",
+      );
+    }
+
+    if (
+      maxOver > 0 &&
+      overProg.totalBalls >= maxOver &&
+      overProg.legalBalls < 6
+    ) {
+      throw new Error(
+        "Over ball limit reached — choose the bowler for the next over",
       );
     }
 
@@ -530,27 +613,28 @@ export async function appendDelivery(
       fielderAssistInsert = aid;
     }
 
-    const needsIncoming =
-      body.dismissal !== "retired_hurt" && body.dismissal !== "retired_out";
-
-    if (needsIncoming) {
-      const inc = body.incomingStrikerId;
-      if (!inc) throw new Error("Choose who comes in after the wicket");
-      const incP = bundle.players.find((p) => p.id === inc);
-      if (!incP || incP.side !== batSide || incP.did_not_bat) {
-        throw new Error("Incoming batter must be on the batting team and not marked DNB");
-      }
-      if (inc === sim.strikerId || inc === sim.nonStrikerId) {
-        throw new Error("Incoming batter cannot already be at the crease");
-      }
-      if (sim.dismissedIds.has(inc)) {
-        throw new Error("That player is already out");
-      }
-      if (inc === dismissedInsert) {
-        throw new Error("Incoming batter cannot be the dismissed player");
-      }
-      incomingInsert = inc;
+    const inc = body.incomingStrikerId;
+    if (!inc) {
+      throw new Error(
+        body.dismissal === "retired_hurt"
+          ? "Choose who replaces the retired-not-out batter at the crease"
+          : "Choose who comes in after the wicket",
+      );
     }
+    const incP = bundle.players.find((p) => p.id === inc);
+    if (!incP || incP.side !== batSide || incP.did_not_bat) {
+      throw new Error("Incoming batter must be on the batting team and not marked DNB");
+    }
+    if (inc === sim.strikerId || inc === sim.nonStrikerId) {
+      throw new Error("Incoming batter cannot already be at the crease");
+    }
+    if (sim.dismissedIds.has(inc)) {
+      throw new Error("That player is already out");
+    }
+    if (inc === dismissedInsert) {
+      throw new Error("Incoming batter cannot be the player leaving the crease");
+    }
+    incomingInsert = inc;
   }
 
   const nextOrder =
@@ -607,7 +691,12 @@ export async function appendDelivery(
   const freshInnings = refreshed.innings.find((i) => i.id === target.id);
   const realDels = refreshed.deliveriesByInningsId[target.id] ?? [];
 
-  await persistInningsState(freshInnings ?? target, refreshed.players, realDels);
+  await persistInningsState(
+    freshInnings ?? target,
+    refreshed.players,
+    realDels,
+    maxOver,
+  );
 
   if (m.status === "completed") {
     await recomputeAllInningsAndSummary(m.id);
@@ -644,7 +733,7 @@ export async function undoLastDelivery(writeToken: string, unlockCookie?: string
 
   const refreshed = await fetchBundle(m);
   const realDels = refreshed.deliveriesByInningsId[inn.id] ?? [];
-  await persistInningsState(inn, refreshed.players, realDels);
+  await persistInningsState(inn, refreshed.players, realDels, m.max_balls_per_over ?? 0);
 
   if (m.status === "completed") {
     await recomputeAllInningsAndSummary(m.id);
@@ -681,7 +770,7 @@ export async function updatePlayer(
   const bundle = await fetchBundle(m);
   for (const inn of bundle.innings) {
     const dlist = bundle.deliveriesByInningsId[inn.id] ?? [];
-    await persistInningsState(inn, bundle.players, dlist);
+    await persistInningsState(inn, bundle.players, dlist, m.max_balls_per_over ?? 0);
   }
 
   if (m.status === "completed") {

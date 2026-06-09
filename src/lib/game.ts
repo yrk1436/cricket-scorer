@@ -42,17 +42,13 @@ function deliveryRotatesStrike(d: DbDelivery): boolean {
   return offExtras % 2 === 1;
 }
 
-/** Retired hurt does not add to wickets column */
+/** Retired not out does not add to wickets column */
 export function wicketIncreasesCount(
   isWicket: boolean,
   dismissal: DismissalType,
 ): boolean {
   if (!isWicket) return false;
   return dismissal !== "retired_hurt";
-}
-
-function dismissalOptionRetires(dismissal: DismissalType): boolean {
-  return dismissal === "retired_hurt" || dismissal === "retired_out";
 }
 
 export function eligibleBatters(side: TeamSide, players: DbPlayer[]) {
@@ -95,6 +91,104 @@ export function lastBowlingDelivery(
   return null;
 }
 
+export type OverProgress = {
+  /** Legal balls in the current over (0 after an over ends). */
+  legalBalls: number;
+  /** All deliveries in the current over, including wides/no-balls. */
+  totalBalls: number;
+  /** True between overs — pick a new bowler before the next delivery. */
+  needsNewBowler: boolean;
+};
+
+function isOverComplete(legalBalls: number, totalBalls: number, maxBallsPerOver: number): boolean {
+  if (legalBalls >= 6) return true;
+  if (maxBallsPerOver > 0 && totalBalls >= maxBallsPerOver) return true;
+  return false;
+}
+
+function scoringDeliveriesSorted(deliveries: DbDelivery[]): DbDelivery[] {
+  return [...deliveries]
+    .filter((d) => !d.is_strike_swap)
+    .sort((a, b) => a.display_order - b.display_order);
+}
+
+function computeOverSlice(
+  sorted: DbDelivery[],
+  maxBallsPerOver: number,
+): { startIndex: number; legalBalls: number; totalBalls: number } {
+  let legalBalls = 0;
+  let totalBalls = 0;
+  let startIndex = 0;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const d = sorted[i];
+    totalBalls += 1;
+    if (d.counts_as_legal_delivery) legalBalls += 1;
+    if (isOverComplete(legalBalls, totalBalls, maxBallsPerOver)) {
+      legalBalls = 0;
+      totalBalls = 0;
+      startIndex = i + 1;
+    }
+  }
+
+  return { startIndex, legalBalls, totalBalls };
+}
+
+/** Deliveries in the over currently being bowled (oldest → newest). */
+export function currentOverDeliveries(
+  deliveries: DbDelivery[],
+  maxBallsPerOver = 0,
+): DbDelivery[] {
+  const sorted = scoringDeliveriesSorted(deliveries);
+  const { startIndex } = computeOverSlice(sorted, maxBallsPerOver);
+  return sorted.slice(startIndex);
+}
+
+/** Progress within the current over (0 = unlimited extras cap). */
+export function currentOverProgress(
+  deliveries: DbDelivery[],
+  maxBallsPerOver = 0,
+): OverProgress {
+  const sorted = scoringDeliveriesSorted(deliveries);
+  const { legalBalls, totalBalls } = computeOverSlice(sorted, maxBallsPerOver);
+  const needsNewBowler =
+    sorted.length > 0 && legalBalls === 0 && totalBalls === 0;
+
+  return { legalBalls, totalBalls, needsNewBowler };
+}
+
+/**
+ * True when a new-over bowler must be chosen before more scoring.
+ * Covers the gap after 6 legal balls when wides/no-balls were recorded
+ * without picking a new bowler first.
+ */
+export function awaitingNewOverBowler(
+  deliveries: DbDelivery[],
+  ballsLegalTotal: number,
+  maxBallsPerOver = 0,
+): boolean {
+  if (deliveries.length === 0 || ballsLegalTotal <= 0) return false;
+  const prog = currentOverProgress(deliveries, maxBallsPerOver);
+  if (prog.needsNewBowler) return true;
+  if (ballsLegalTotal % 6 !== 0 || prog.legalBalls > 0) return false;
+  return true;
+}
+
+/** Server: incoming delivery needs a different bowler than the last over. */
+export function mustChangeBowlerForDelivery(
+  deliveries: DbDelivery[],
+  ballsLegalTotal: number,
+  proposedBowlerId: string,
+  maxBallsPerOver = 0,
+): boolean {
+  if (!awaitingNewOverBowler(deliveries, ballsLegalTotal, maxBallsPerOver)) {
+    return false;
+  }
+  const last = lastBowlingDelivery(deliveries);
+  if (!last?.bowler_id) return true;
+  return proposedBowlerId === last.bowler_id;
+}
+
 /**
  * Rebuild aggregates from ball history.
  * Strike seed applies only when there are zero deliveries on this innings row.
@@ -104,6 +198,7 @@ export function replayInnings(
   allPlayers: DbPlayer[],
   deliveries: DbDelivery[],
   strikeSeed?: ReplayStrikeSeed | null,
+  maxBallsPerOver = 0,
 ): SimState | null {
   const lineup = eligibleBatters(battingSide, allPlayers);
   const sorted = [...deliveries].sort((a, b) => a.display_order - b.display_order);
@@ -129,7 +224,8 @@ export function replayInnings(
   let wickets = 0;
   let ballsLegal = 0;
 
-  for (const d of sorted) {
+  for (let i = 0; i < sorted.length; i++) {
+    const d = sorted[i];
     if (d.is_strike_swap) {
       [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
       continue;
@@ -141,16 +237,18 @@ export function replayInnings(
 
     if (wicketIncreasesCount(d.is_wicket, d.dismissal)) wickets += 1;
 
-    const endOver =
-      d.counts_as_legal_delivery &&
-      ballsLegal > 0 &&
-      ballsLegal % 6 === 0;
+    const prevProg = currentOverProgress(sorted.slice(0, i), maxBallsPerOver);
+    const currProg = currentOverProgress(sorted.slice(0, i + 1), maxBallsPerOver);
+    const endOver = currProg.needsNewBowler && !prevProg.needsNewBowler;
 
     const outId =
       d.dismissed_batsman_id ?? d.striker_id ?? strikerId;
 
     if (d.is_wicket) {
-      dismissedIds.add(outId);
+      // Retired not out — batter may bat again later in the innings.
+      if (d.dismissal !== "retired_hurt") {
+        dismissedIds.add(outId);
+      }
 
       let next: string | null = null;
       const inc = d.incoming_striker_id;
@@ -160,11 +258,12 @@ export function replayInnings(
         !dismissedIds.has(inc) &&
         inc !== strikerId &&
         inc !== nonStrikerId &&
+        inc !== outId &&
         lineup.some((p) => p.id === inc)
       ) {
         next = inc;
       }
-      if (next == null && !dismissalOptionRetires(d.dismissal)) {
+      if (next == null) {
         const vacatedEnd =
           outId === nonStrikerId ? "non_striker" : "striker";
         next = nextBatId(

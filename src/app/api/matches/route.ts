@@ -8,6 +8,7 @@ export async function POST(req: Request) {
       teamAName: String(body.teamAName ?? ""),
       teamBName: String(body.teamBName ?? ""),
       oversPerInnings: Number(body.oversPerInnings) || 20,
+      maxBallsPerOver: Number(body.maxBallsPerOver) || 0,
       maxWickets: Number(body.maxWickets) || 10,
       inningsCount: 2,
       tossWinner: body.tossWinner === "b" ? "b" : "a",

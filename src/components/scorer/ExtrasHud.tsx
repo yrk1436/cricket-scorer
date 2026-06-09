@@ -40,8 +40,9 @@ export default function ExtrasHud({ open, onClose, onSubmit, busy }: Props) {
   return (
     <HudModal open={open} title="Extras" onBackdropClick={onClose}>
       <p className="mb-3 text-sm opacity-85">
-        Wide and no-ball do not use a legal ball. Byes and leg-byes count as a
-        legal delivery.
+        Wide and no-ball add 1 penalty run automatically (wd = 1, wd+1 = 2, nb =
+        1, nb+4 = 5). They do not use a legal ball. Byes and leg-byes count as
+        a legal delivery.
       </p>
       <div className="mb-4 flex flex-wrap gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
         {tabs.map((t) => (
@@ -70,7 +71,7 @@ export default function ExtrasHud({ open, onClose, onSubmit, busy }: Props) {
               onClick={() => pick(wideDelivery(n))}
               className="chip-btn extras disabled:opacity-40"
             >
-              wd+{n}
+              {n === 0 ? "wd" : `wd+${n}`}
             </button>
           ))}
         </div>

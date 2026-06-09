@@ -8,7 +8,9 @@ type Props = {
   nonStrikerRuns?: number;
   nonStrikerBalls?: number;
   bowlerName: string;
-  ballsInOver: number;
+  overStatus: string;
+  bowlerPickPending?: boolean;
+  onPickBowler?: () => void;
   disabled?: boolean;
   onSwap: () => void;
 };
@@ -26,7 +28,9 @@ export default function CreaseBar({
   nonStrikerRuns = 0,
   nonStrikerBalls = 0,
   bowlerName,
-  ballsInOver,
+  overStatus,
+  bowlerPickPending,
+  onPickBowler,
   disabled,
   onSwap,
 }: Props) {
@@ -57,13 +61,22 @@ export default function CreaseBar({
           {nonStrikerMini && <p className="runs-mini">{nonStrikerMini}</p>}
         </div>
       </div>
-      <div className="bowler-line">
+      <div className={`bowler-line${bowlerPickPending ? " bowler-line--pick" : ""}`}>
         <span>
-          Bowler: <b>{bowlerName}</b>
+          Bowler:{" "}
+          {bowlerPickPending ? (
+            <span className="bowler-unset">not set</span>
+          ) : (
+            <b>{bowlerName}</b>
+          )}
         </span>
-        <span style={{ fontFamily: "var(--mono)" }}>
-          Over ball {ballsInOver || "—"}
-        </span>
+        {bowlerPickPending && onPickBowler ? (
+          <button type="button" className="bowler-pick-btn" onClick={onPickBowler}>
+            Choose bowler
+          </button>
+        ) : (
+          <span style={{ fontFamily: "var(--mono)" }}>{overStatus}</span>
+        )}
       </div>
     </section>
   );

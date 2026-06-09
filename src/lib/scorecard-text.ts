@@ -14,7 +14,14 @@ export function formatDeliveryWicket(
 ): string {
   if (!d.is_wicket) return "";
   const outId = d.dismissed_batsman_id ?? d.striker_id;
-  let label = d.dismissal !== "none" ? d.dismissal : "out";
+  let label =
+    d.dismissal === "retired_hurt"
+      ? "retired not out"
+      : d.dismissal === "retired_out"
+        ? "retired out"
+        : d.dismissal !== "none"
+          ? d.dismissal
+          : "out";
   if (outId !== d.striker_id) label += `(NS:${name(outId)})`;
   if (d.fielder_id) {
     label += ` ${name(d.fielder_id)}`;

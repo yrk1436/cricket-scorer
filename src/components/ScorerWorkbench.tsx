@@ -10,7 +10,9 @@ import PickerField from "@/components/scorer/PickerField";
 import ScoringPad from "@/components/scorer/ScoringPad";
 import WicketHud from "@/components/scorer/WicketHud";
 import {
+  awaitingNewOverBowler,
   batterStats,
+  currentOverProgress,
   eligibleBatters,
   eligibleBowlers,
   lastBowlingDelivery,
@@ -21,7 +23,7 @@ import type { DeliveryInput } from "@/lib/match-service";
 import type { SerialBundle } from "@/lib/scorecard-text";
 import type { DbInnings, TeamSide } from "@/lib/types";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   writeToken: string;
@@ -64,6 +66,9 @@ export default function ScorerWorkbench({
     ready: false,
   });
   const [wicketHudOpen, setWicketHudOpen] = useState(false);
+  const [bowlerHudOpen, setBowlerHudOpen] = useState(false);
+  const [openingHudOpen, setOpeningHudOpen] = useState(true);
+  const prevNeedsBowlerRef = useRef(false);
 
   const { match } = bundle;
   const sideName = (side: "a" | "b") =>
@@ -150,51 +155,67 @@ export default function ScorerWorkbench({
       bundle.players,
       activeDels,
       strikeSeed,
+      match.max_balls_per_over ?? 0,
     );
-  }, [activeDels, battingSide, bundle.players, targetInnings]);
+  }, [activeDels, battingSide, bundle.players, match.max_balls_per_over, targetInnings]);
 
+  const maxBallsPerOver = match.max_balls_per_over ?? 0;
   const lastBd = lastBowlingDelivery(activeDels);
+  const overProg = useMemo(
+    () => currentOverProgress(activeDels, maxBallsPerOver),
+    [activeDels, maxBallsPerOver],
+  );
   const ballsLegal = sim?.balls_legal ?? 0;
-  const newOver =
-    activeDels.length === 0 || (ballsLegal > 0 && ballsLegal % 6 === 0);
-  const lockedBowlerId =
-    !newOver && lastBd?.bowler_id ? lastBd.bowler_id : null;
 
   const needsOpeningGate =
     allowPad && !!targetInnings && targetInnings.current_bowler_id == null;
 
-  const pickNewOverBowlerGate =
-    !needsOpeningGate &&
-    allowPad &&
-    !!targetInnings &&
-    ballsLegal > 0 &&
-    ballsLegal % 6 === 0;
+  const awaitingBowler = awaitingNewOverBowler(
+    activeDels,
+    ballsLegal,
+    maxBallsPerOver,
+  );
 
-  const pickGateKey = pickNewOverBowlerGate ? ballsLegal : -1;
+  /** Confirmed pick is only valid for this over boundary (legal-ball count). */
+  const bowlerPickConfirmed =
+    overPick.ready && overPick.gateKey === ballsLegal;
+
+  const needsBowlerPick = awaitingBowler && !bowlerPickConfirmed;
+
+  const mustPickNewOverBowler =
+    allowPad && !!targetInnings && needsBowlerPick;
+
+  const openBowlerPicker = () => {
+    setErr(null);
+    setBowlerHudOpen(true);
+  };
 
   useEffect(() => {
-    setOverPick({ gateKey: pickGateKey, bowlingId: "", ready: false });
-  }, [pickGateKey]);
+    if (needsOpeningGate) setOpeningHudOpen(true);
+  }, [needsOpeningGate]);
+
+  useEffect(() => {
+    if (needsBowlerPick && !prevNeedsBowlerRef.current) {
+      setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
+      setBowlerHudOpen(true);
+    }
+    prevNeedsBowlerRef.current = needsBowlerPick;
+  }, [needsBowlerPick, ballsLegal]);
 
   const bowlersForNewOver = useMemo(
     () => bowlers.filter((b) => b.id !== lastBd?.bowler_id),
     [bowlers, lastBd?.bowler_id],
   );
 
-  const effectiveBowlerId =
-    lockedBowlerId ??
-    (pickNewOverBowlerGate
-      ? overPick.ready
-        ? overPick.bowlingId
-        : ""
-      : targetInnings?.current_bowler_id ?? "");
+  const effectiveBowlerId = awaitingBowler
+    ? bowlerPickConfirmed
+      ? overPick.bowlingId
+      : ""
+    : lastBd?.bowler_id ?? targetInnings?.current_bowler_id ?? "";
 
   const bowlerInSquad =
     !effectiveBowlerId || bowlers.some((b) => b.id === effectiveBowlerId);
   const safeBowlerValue = bowlerInSquad ? effectiveBowlerId : "";
-
-  const mustPickNewOverBowler =
-    pickNewOverBowlerGate && !lockedBowlerId && !overPick.ready;
 
   const padUnlocked =
     allowPad &&
@@ -204,7 +225,13 @@ export default function ScorerWorkbench({
     !extrasHudOpen &&
     !!sim;
 
-  const ballsInOver = ballsLegal % 6 || (ballsLegal > 0 ? 6 : 0);
+  const overStatus = needsBowlerPick
+    ? "Pick bowler first"
+    : awaitingBowler && bowlerPickConfirmed
+      ? "New over"
+      : maxBallsPerOver > 0
+        ? `Ball ${overProg.totalBalls}/${maxBallsPerOver} · legal ${overProg.legalBalls}/6`
+        : `Over ball ${overProg.legalBalls || "—"}`;
 
   const strikerStat = useMemo(
     () => batterStats(activeDels, sim?.strikerId),
@@ -324,8 +351,13 @@ export default function ScorerWorkbench({
       setErr("Pick a bowler for this over");
       return;
     }
+    if (overPick.bowlingId === lastBd?.bowler_id) {
+      setErr("Pick a different bowler — the previous over's bowler cannot continue");
+      return;
+    }
     setErr(null);
-    setOverPick((o) => ({ ...o, ready: true }));
+    setOverPick((o) => ({ ...o, ready: true, gateKey: ballsLegal }));
+    setBowlerHudOpen(false);
   }
 
   const statusBadge =
@@ -333,7 +365,11 @@ export default function ScorerWorkbench({
 
   return (
     <div className="phone-shell">
-      <HudModal open={needsOpeningGate && !!targetInnings} title="Start innings">
+      <HudModal
+        open={needsOpeningGate && openingHudOpen && !!targetInnings}
+        title="Start innings"
+        onBackdropClick={() => setOpeningHudOpen(false)}
+      >
         {targetInnings && (
           <OpeningLineupForm
             busy={busy}
@@ -341,18 +377,29 @@ export default function ScorerWorkbench({
             bowlers={bowlers}
             defaultStrikerId={targetInnings.current_striker_id ?? ""}
             defaultNonStrikerId={targetInnings.current_non_striker_id ?? ""}
-            onSubmit={postOpening}
+            onSubmit={async (payload) => {
+              const ok = await postOpening(payload);
+              if (ok) setOpeningHudOpen(false);
+            }}
+            onCancel={() => setOpeningHudOpen(false)}
           />
         )}
       </HudModal>
 
       <HudModal
-        open={pickNewOverBowlerGate && !overPick.ready}
+        open={needsBowlerPick && bowlerHudOpen}
         title="New over — choose bowler"
+        onBackdropClick={() => setBowlerHudOpen(false)}
       >
+        {err ? (
+          <div className="error-banner mb-3" role="alert">
+            {err}
+          </div>
+        ) : null}
         <p className="mb-3 text-sm opacity-90">
-          The previous over&apos;s bowler cannot bowl again next over. Pick who
-          bowls this over, then continue scoring.
+          Six legal balls finished
+          {maxBallsPerOver > 0 ? ` (or ${maxBallsPerOver}-ball cap)` : ""}.
+          Pick who bowls this over — not the same bowler as the last over.
         </p>
         {bowlersForNewOver.length === 0 ? (
           <p className="text-sm" style={{ color: "#fde68a" }}>
@@ -376,14 +423,26 @@ export default function ScorerWorkbench({
               required
               disabled={busy}
             />
-            <button
-              type="button"
-              disabled={busy || !overPick.bowlingId}
-              className="hud-btn primary mt-4 w-full disabled:opacity-50"
-              onClick={() => confirmNewOverBowler()}
-            >
-              Continue scoring
-            </button>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                className="hud-btn flex-1"
+                onClick={() => {
+                  setErr(null);
+                  setBowlerHudOpen(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={busy || !overPick.bowlingId}
+                className="hud-btn primary flex-1 disabled:opacity-50"
+                onClick={() => confirmNewOverBowler()}
+              >
+                Continue scoring
+              </button>
+            </div>
           </>
         )}
       </HudModal>
@@ -399,7 +458,11 @@ export default function ScorerWorkbench({
         <WicketHud
           open={wicketHudOpen}
           busy={busy}
-          onClose={() => setWicketHudOpen(false)}
+          error={err}
+          onClose={() => {
+            setErr(null);
+            setWicketHudOpen(false);
+          }}
           strikerId={sim.strikerId}
           nonStrikerId={sim.nonStrikerId}
           strikerName={pName(sim.strikerId)}
@@ -420,7 +483,11 @@ export default function ScorerWorkbench({
         </span>
       </header>
 
-      {err && <div className="error-banner no-print">{err}</div>}
+      {err &&
+        !(needsBowlerPick && bowlerHudOpen) &&
+        !(wicketHudOpen) && (
+          <div className="error-banner no-print">{err}</div>
+        )}
 
       {match.status === "completed" && locked && (
         <form onSubmit={unlock} className="glass no-print" style={{ padding: 16 }}>
@@ -462,6 +529,15 @@ export default function ScorerWorkbench({
         targetInnings={targetInnings}
         sideName={sideName}
         allInnings={bundle.innings}
+        live={
+          sim && targetInnings && !targetInnings.completed
+            ? {
+                runs: sim.runs,
+                wickets: sim.wickets,
+                ballsLegal: sim.balls_legal,
+              }
+            : null
+        }
       />
 
       {sim && (
@@ -473,22 +549,45 @@ export default function ScorerWorkbench({
           nonStrikerRuns={nonStrikerStat.runs}
           nonStrikerBalls={nonStrikerStat.balls}
           bowlerName={pName(safeBowlerValue || null)}
-          ballsInOver={ballsInOver}
+          overStatus={overStatus}
+          bowlerPickPending={needsBowlerPick}
+          onPickBowler={openBowlerPicker}
           disabled={busy || !padUnlocked}
           onSwap={() => void postDelivery({ strikeSwap: true })}
         />
       )}
 
-      {pickNewOverBowlerGate && !overPick.ready && (
+      {needsOpeningGate && !openingHudOpen && (
         <div className="chase-bar warn no-print">
-          Confirm the new-over bowler in the dialog above before scoring.
+          <button
+            type="button"
+            className="bowler-pick-link"
+            onClick={() => setOpeningHudOpen(true)}
+          >
+            Set openers &amp; bowler
+          </button>{" "}
+          before scoring.
         </div>
       )}
 
       {targetInnings && (
         <section className="glass no-print" style={{ padding: "14px 16px" }}>
-          <p className="section-title">Last 10 balls</p>
-          <BallOrbits deliveries={activeDels} />
+          <p className="section-title">
+            This over
+            {overProg.legalBalls > 0 || overProg.totalBalls > 0 ? (
+              <span className="section-title-sub">
+                {overProg.legalBalls}/6 legal
+                {maxBallsPerOver > 0 && overProg.totalBalls > 0
+                  ? ` · ${overProg.totalBalls}/${maxBallsPerOver} balls`
+                  : ""}
+              </span>
+            ) : null}
+          </p>
+          <BallOrbits
+            deliveries={activeDels}
+            variant="currentOver"
+            maxBallsPerOver={maxBallsPerOver}
+          />
         </section>
       )}
 
@@ -544,13 +643,22 @@ export default function ScorerWorkbench({
           disabled={busy || !padUnlocked}
           onRun={recordRun}
           onExtras={() => setExtrasHudOpen(true)}
-          onWicket={() => setWicketHudOpen(true)}
+          onWicket={() => {
+            setErr(null);
+            setWicketHudOpen(true);
+          }}
         />
       )}
 
       <details className="admin-panel glass no-print">
         <summary>Squad &amp; admin</summary>
         <div style={{ marginTop: 12 }}>
+          <MatchSettingsPanel
+            match={match}
+            disabled={busy || match.status === "completed"}
+            apiRoot={apiRoot}
+            exec={exec}
+          />
           <button
             type="button"
             disabled={busy}
@@ -589,6 +697,110 @@ export default function ScorerWorkbench({
   );
 }
 
+function MatchSettingsPanel({
+  match,
+  disabled,
+  apiRoot,
+  exec,
+}: {
+  match: {
+    overs_per_innings: number;
+    max_wickets: number;
+    max_balls_per_over?: number;
+  };
+  disabled: boolean;
+  apiRoot: string;
+  exec: (fn: () => Promise<void>) => Promise<boolean>;
+}) {
+  const [maxBalls, setMaxBalls] = useState(match.max_balls_per_over ?? 0);
+  const [overs, setOvers] = useState(match.overs_per_innings);
+  const [maxWk, setMaxWk] = useState(match.max_wickets);
+
+  useEffect(() => {
+    setMaxBalls(match.max_balls_per_over ?? 0);
+    setOvers(match.overs_per_innings);
+    setMaxWk(match.max_wickets);
+  }, [match.max_balls_per_over, match.overs_per_innings, match.max_wickets]);
+
+  return (
+    <form
+      className="mb-4 space-y-2 border-b border-white/10 pb-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void exec(async () => {
+          const r = await fetch(`${apiRoot}/settings`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              maxBallsPerOver: maxBalls,
+              oversPerInnings: overs,
+              maxWickets: maxWk,
+            }),
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error ?? "Settings update failed");
+        });
+      }}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">
+        Match settings
+      </p>
+      <label className="field" style={{ marginBottom: 0 }}>
+        <span>Max balls per over (0 = no cap)</span>
+        <input
+          type="number"
+          min={0}
+          max={30}
+          disabled={disabled}
+          value={maxBalls}
+          onChange={(e) => setMaxBalls(Number(e.target.value) || 0)}
+          className="input-select"
+        />
+      </label>
+      <p className="text-xs opacity-60">
+        Kids games: set 8 or 10 to limit extras. Over still ends at 6 legal
+        balls.
+      </p>
+      <div className="field-row">
+        <label className="field" style={{ marginBottom: 0 }}>
+          <span>Overs per innings</span>
+          <input
+            type="number"
+            min={1}
+            max={200}
+            disabled={disabled}
+            value={overs}
+            onChange={(e) => setOvers(Number(e.target.value) || 1)}
+            className="input-select"
+          />
+          <p className="text-xs opacity-60" style={{ marginTop: 4 }}>
+            Extend mid-innings (e.g. 20 → 25) — applies from save onward.
+          </p>
+        </label>
+        <label className="field" style={{ marginBottom: 0 }}>
+          <span>Max wickets</span>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            disabled={disabled}
+            value={maxWk}
+            onChange={(e) => setMaxWk(Number(e.target.value) || 1)}
+            className="input-select"
+          />
+        </label>
+      </div>
+      <button
+        type="submit"
+        disabled={disabled}
+        className="hud-btn primary w-full disabled:opacity-50"
+      >
+        Save settings
+      </button>
+    </form>
+  );
+}
+
 function OpeningLineupForm({
   batsmen,
   bowlers,
@@ -596,6 +808,7 @@ function OpeningLineupForm({
   defaultStrikerId,
   defaultNonStrikerId,
   onSubmit,
+  onCancel,
 }: {
   batsmen: { id: string; display_name: string }[];
   bowlers: { id: string; display_name: string }[];
@@ -607,6 +820,7 @@ function OpeningLineupForm({
     nonStrikerId: string;
     bowlerId: string;
   }) => Promise<unknown>;
+  onCancel: () => void;
 }) {
   const [strikerId, setStrikerId] = useState(defaultStrikerId);
   const [nonStrikerId, setNonStrikerId] = useState(defaultNonStrikerId);
@@ -654,13 +868,22 @@ function OpeningLineupForm({
           required
           disabled={busy}
         />
-        <button
-          type="submit"
-          disabled={busy || !strikerId || !nonStrikerId || !bowlerId}
-          className="hud-btn primary mt-2 w-full disabled:opacity-50"
-        >
-          Confirm and start scoring
-        </button>
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            className="hud-btn flex-1"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busy || !strikerId || !nonStrikerId || !bowlerId}
+            className="hud-btn primary flex-1 disabled:opacity-50"
+          >
+            Start scoring
+          </button>
+        </div>
       </form>
     </>
   );
