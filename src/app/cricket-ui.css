@@ -963,6 +963,141 @@
   }
 }
 
+@media (max-width: 400px) {
+  .cricket-app .field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Full scorecard tables (public share, completed matches) */
+.cricket-app .match-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cricket-app .match-result-header .team-score-block {
+  flex: 1;
+  min-width: 120px;
+}
+
+.cricket-app .match-result-header .team-name {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.cricket-app .match-result-header .team-score {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.65rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.cricket-app .match-result-header .team-overs {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.cricket-app .match-result-header .vs-sep {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cricket-app .scorecard-full .score-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.cricket-app .sc-table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cricket-app .sc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.cricket-app .sc-table th,
+.cricket-app .sc-table td {
+  padding: 7px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.cricket-app .sc-table th {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.cricket-app .sc-table td.num,
+.cricket-app .sc-table th.num {
+  text-align: right;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.cricket-app .sc-table .batter-name {
+  display: block;
+  font-weight: 500;
+}
+
+.cricket-app .sc-table .dismissal {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.cricket-app .extras-line {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+}
+
+.cricket-app .extras-line .extras-label {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.cricket-app .extras-line .extras-detail {
+  color: var(--muted);
+}
+
+.cricket-app .dnb-line {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.cricket-app .dnb-line .dnb-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cricket-app .fow-line {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
 @media print {
   .cricket-app {
     background: #fff;
