@@ -9,7 +9,7 @@
   <body>
   <!--
     Admin backdoor mockup — static HTML/CSS only.
-    Flow: secret URL + admin key → searchable list of all matches → scorecard / scorer links.
+    Flow: unlisted URL → searchable list of all matches → scorecard / scorer links.
   -->
 
     <nav class="mock-nav">
@@ -21,33 +21,7 @@
     </nav>
 
     <div class="admin-shell">
-      <!-- Gate (shown on first visit — toggle .is-unlocked on .admin-shell to see list) -->
-      <section class="admin-gate glass is-unlocked-demo">
-        <div class="admin-gate-icon" aria-hidden="true">🔐</div>
-        <h1>Admin access</h1>
-        <p class="sub">
-          Secret route <code>/admin-scorecards</code> · not linked from the public app.
-        </p>
-        <form class="admin-gate-form" action="#" onsubmit="return false">
-          <label class="field">
-            <span>Admin key</span>
-            <input
-              type="password"
-              placeholder="From ADMIN_SECRET env"
-              value="••••••••••••"
-              autocomplete="off"
-            />
-          </label>
-          <button type="submit" class="btn-primary">Unlock match list</button>
-        </form>
-        <p class="admin-gate-hint">
-          Mockup note: remove class <code>is-unlocked-demo</code> on
-          <code>.admin-gate</code> to preview the locked state.
-        </p>
-      </section>
-
-      <!-- Main list (after unlock) -->
-      <div class="admin-main is-unlocked-demo">
+      <div class="admin-main">
         <header class="admin-header">
           <div>
             <h1>All matches</h1>
@@ -185,8 +159,8 @@
         </ul>
 
         <p class="admin-footer-note">
-          Production: protect with <code>ADMIN_SECRET</code> header or cookie;
-          list from Supabase <code>matches</code> ordered by <code>created_at desc</code>.
+          Unlisted route only — not linked from the public app.
+          List from Supabase <code>matches</code> ordered by <code>created_at desc</code>.
         </p>
       </div>
     </div>

@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 type Props = {
-  initiallyAuthed: boolean;
   siteOrigin: string;
 };
 
@@ -38,13 +37,7 @@ function scoreLine(innings: AdminMatchListRow["innings"]) {
     .join(" · ");
 }
 
-export default function AdminScorecards({
-  initiallyAuthed,
-  siteOrigin,
-}: Props) {
-  const [authed, setAuthed] = useState(initiallyAuthed);
-  const [key, setKey] = useState("");
-  const [busy, setBusy] = useState(false);
+export default function AdminScorecards({ siteOrigin }: Props) {
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -63,29 +56,8 @@ export default function AdminScorecards({
   }, [filter, q, sort]);
 
   useEffect(() => {
-    if (authed) void load().catch((e) => setErr(String(e)));
-  }, [authed, load]);
-
-  async function unlock(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    try {
-      const r = await fetch("/api/admin-scorecards/unlock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Unlock failed");
-      setAuthed(true);
-      setKey("");
-    } catch (x) {
-      setErr(x instanceof Error ? x.message : String(x));
-    } finally {
-      setBusy(false);
-    }
-  }
+    void load().catch((e) => setErr(String(e)));
+  }, [load]);
 
   async function copyText(text: string) {
     try {
@@ -97,44 +69,12 @@ export default function AdminScorecards({
 
   const origin = siteOrigin.replace(/\/$/, "");
 
-  if (!authed) {
-    return (
-      <div className="admin-shell">
-        <section className="admin-gate glass">
-          <div className="admin-gate-icon" aria-hidden="true">
-            🔐
-          </div>
-          <h1>Admin scorecards</h1>
-          <p className="sub">
-            Protected route · <code>/admin-scorecards</code>
-          </p>
-          <form className="admin-gate-form" onSubmit={unlock}>
-            <label className="field">
-              <span>Admin key</span>
-              <input
-                type="password"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder="ADMIN_SECRET"
-                autoComplete="off"
-              />
-            </label>
-            {err && <div className="error-banner">{err}</div>}
-            <button type="submit" disabled={busy || !key} className="btn-primary">
-              {busy ? "Checking…" : "Unlock"}
-            </button>
-          </form>
-        </section>
-      </div>
-    );
-  }
-
   return (
     <div className="admin-shell">
       <header className="admin-header">
         <div>
           <h1>All scorecards</h1>
-          <p className="sub">Admin session active</p>
+          <p className="sub">Unlisted route · <code>/admin-scorecards</code></p>
         </div>
         <Link href="/scorer" className="btn-primary admin-new-btn">
           + New match

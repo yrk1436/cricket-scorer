@@ -1,15 +1,8 @@
-import { cookies } from "next/headers";
 import { bad, ok } from "@/lib/api-json";
-import { ADMIN_COOKIE_NAME, parseAdminSession } from "@/lib/admin-auth";
 import { listMatchesForAdmin } from "@/lib/match-service";
 
 export async function GET(req: Request) {
   try {
-    const cookie = (await cookies()).get(ADMIN_COOKIE_NAME)?.value;
-    if (!parseAdminSession(cookie)) {
-      return bad("Admin auth required", 401);
-    }
-
     const url = new URL(req.url);
     const q = url.searchParams.get("q") ?? undefined;
     const status = url.searchParams.get("status") as

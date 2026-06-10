@@ -15,7 +15,3 @@ export function getServiceRoleKey() {
 export function getUnlockSecret() {
   return requireEnv("MATCH_UNLOCK_SECRET");
 }
-
-export function getAdminSecret() {
-  return requireEnv("ADMIN_SECRET");
-}
