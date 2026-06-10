@@ -126,7 +126,9 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
         </div>
 
         <div className="field">
-          <label htmlFor="max-balls-over">Max balls per over (0 = no cap)</label>
+          <label htmlFor="max-balls-over">
+            Max wides/no-balls per over (0 = no cap)
+          </label>
           <input
             id="max-balls-over"
             type="number"
@@ -149,8 +151,8 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
               value={tossWin}
               onChange={(e) => setTossWin(e.target.value === "b" ? "b" : "a")}
             >
-              <option value="a">Team A</option>
-              <option value="b">Team B</option>
+              <option value="a">{teamA.trim() || "Team A"}</option>
+              <option value="b">{teamB.trim() || "Team B"}</option>
             </select>
           </div>
           <div className="field">

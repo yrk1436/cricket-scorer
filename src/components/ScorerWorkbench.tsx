@@ -6,7 +6,7 @@ import Scorecard from "@/components/Scorecard";
 import CreaseBar from "@/components/scorer/CreaseBar";
 import ExtrasHud from "@/components/scorer/ExtrasHud";
 import HeroScore from "@/components/scorer/HeroScore";
-import PickerField from "@/components/scorer/PickerField";
+import PickerField, { PickerGroup } from "@/components/scorer/PickerField";
 import ScoringPad from "@/components/scorer/ScoringPad";
 import WicketHud from "@/components/scorer/WicketHud";
 import {
@@ -230,8 +230,8 @@ export default function ScorerWorkbench({
     : awaitingBowler && bowlerPickConfirmed
       ? "New over"
       : maxBallsPerOver > 0
-        ? `Ball ${overProg.totalBalls}/${maxBallsPerOver} · legal ${overProg.legalBalls}/6`
-        : `Over ball ${overProg.legalBalls || "—"}`;
+        ? `Legal ${overProg.legalBalls}/6 · wd/nb ${overProg.illegalBalls}/${maxBallsPerOver}`
+        : `Legal ${overProg.legalBalls}/6`;
 
   const strikerStat = useMemo(
     () => batterStats(activeDels, sim?.strikerId),
@@ -375,8 +375,6 @@ export default function ScorerWorkbench({
             busy={busy}
             batsmen={batsmen}
             bowlers={bowlers}
-            defaultStrikerId={targetInnings.current_striker_id ?? ""}
-            defaultNonStrikerId={targetInnings.current_non_striker_id ?? ""}
             onSubmit={async (payload) => {
               const ok = await postOpening(payload);
               if (ok) setOpeningHudOpen(false);
@@ -397,9 +395,8 @@ export default function ScorerWorkbench({
           </div>
         ) : null}
         <p className="mb-3 text-sm opacity-90">
-          Six legal balls finished
-          {maxBallsPerOver > 0 ? ` (or ${maxBallsPerOver}-ball cap)` : ""}.
-          Pick who bowls this over — not the same bowler as the last over.
+          Six legal balls finished. Pick who bowls this over — not the same
+          bowler as the last over.
         </p>
         {bowlersForNewOver.length === 0 ? (
           <p className="text-sm" style={{ color: "#fde68a" }}>
@@ -577,8 +574,8 @@ export default function ScorerWorkbench({
             {overProg.legalBalls > 0 || overProg.totalBalls > 0 ? (
               <span className="section-title-sub">
                 {overProg.legalBalls}/6 legal
-                {maxBallsPerOver > 0 && overProg.totalBalls > 0
-                  ? ` · ${overProg.totalBalls}/${maxBallsPerOver} balls`
+                {maxBallsPerOver > 0
+                  ? ` · wd/nb ${overProg.illegalBalls}/${maxBallsPerOver}`
                   : ""}
               </span>
             ) : null}
@@ -746,7 +743,7 @@ function MatchSettingsPanel({
         Match settings
       </p>
       <label className="field" style={{ marginBottom: 0 }}>
-        <span>Max balls per over (0 = no cap)</span>
+        <span>Max wides/no-balls per over (0 = no cap)</span>
         <input
           type="number"
           min={0}
@@ -805,16 +802,12 @@ function OpeningLineupForm({
   batsmen,
   bowlers,
   busy,
-  defaultStrikerId,
-  defaultNonStrikerId,
   onSubmit,
   onCancel,
 }: {
   batsmen: { id: string; display_name: string }[];
   bowlers: { id: string; display_name: string }[];
   busy: boolean;
-  defaultStrikerId: string;
-  defaultNonStrikerId: string;
   onSubmit: (payload: {
     strikerId: string;
     nonStrikerId: string;
@@ -822,12 +815,15 @@ function OpeningLineupForm({
   }) => Promise<unknown>;
   onCancel: () => void;
 }) {
-  const [strikerId, setStrikerId] = useState(defaultStrikerId);
-  const [nonStrikerId, setNonStrikerId] = useState(defaultNonStrikerId);
+  const [strikerId, setStrikerId] = useState("");
+  const [nonStrikerId, setNonStrikerId] = useState("");
   const [bowlerId, setBowlerId] = useState("");
 
   const batOptions = batsmen.map((p) => ({ id: p.id, label: p.display_name }));
   const bowlOptions = bowlers.map((p) => ({ id: p.id, label: p.display_name }));
+  const strikerOptions = batOptions.filter((o) => o.id !== nonStrikerId);
+  const nonStrikerOptions = batOptions.filter((o) => o.id !== strikerId);
+  const creaseClash = !!strikerId && strikerId === nonStrikerId;
 
   return (
     <>
@@ -838,14 +834,19 @@ function OpeningLineupForm({
         className="space-y-1"
         onSubmit={(e) => {
           e.preventDefault();
+          if (strikerId === nonStrikerId) return;
           void onSubmit({ strikerId, nonStrikerId, bowlerId });
         }}
       >
+        <PickerGroup>
         <PickerField
           label="Striker"
           value={strikerId}
-          onChange={setStrikerId}
-          options={batOptions}
+          onChange={(id) => {
+            setStrikerId(id);
+            if (id === nonStrikerId) setNonStrikerId("");
+          }}
+          options={strikerOptions}
           placeholder="Pick…"
           required
           disabled={busy}
@@ -853,8 +854,11 @@ function OpeningLineupForm({
         <PickerField
           label="Non-striker"
           value={nonStrikerId}
-          onChange={setNonStrikerId}
-          options={batOptions}
+          onChange={(id) => {
+            setNonStrikerId(id);
+            if (id === strikerId) setStrikerId("");
+          }}
+          options={nonStrikerOptions}
           placeholder="Pick…"
           required
           disabled={busy}
@@ -868,6 +872,7 @@ function OpeningLineupForm({
           required
           disabled={busy}
         />
+        </PickerGroup>
         <div className="mt-2 flex gap-2">
           <button
             type="button"
@@ -878,7 +883,9 @@ function OpeningLineupForm({
           </button>
           <button
             type="submit"
-            disabled={busy || !strikerId || !nonStrikerId || !bowlerId}
+            disabled={
+              busy || !strikerId || !nonStrikerId || !bowlerId || creaseClash
+            }
             className="hud-btn primary flex-1 disabled:opacity-50"
           >
             Start scoring

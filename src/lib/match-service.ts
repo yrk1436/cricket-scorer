@@ -406,18 +406,6 @@ export async function createMatch(input: CreateMatchInput) {
   if (pErr) throw new Error(pErr.message);
 
   const firstBat = firstBattingSide(m.toss_winner, m.toss_elect);
-  const { data: playerRows } = await client
-    .from("players")
-    .select("*")
-    .eq("match_id", m.id);
-
-  const allP = (playerRows ?? []) as DbPlayer[];
-  const batList = allP
-    .filter((p) => p.side === firstBat && !p.did_not_bat)
-    .sort((a, b) => a.sort_order - b.sort_order);
-
-  const s1 = batList[0]?.id;
-  const s2 = batList[1]?.id ?? s1;
 
   const { error: iErr } = await client.from("innings").insert({
     match_id: m.id,
@@ -427,8 +415,8 @@ export async function createMatch(input: CreateMatchInput) {
     wickets: 0,
     balls_legal: 0,
     completed: false,
-    current_striker_id: s1 ?? null,
-    current_non_striker_id: s2 ?? null,
+    current_striker_id: null,
+    current_non_striker_id: null,
   });
 
   if (iErr) throw new Error(iErr.message);
@@ -564,11 +552,12 @@ export async function appendDelivery(
 
     if (
       maxOver > 0 &&
-      overProg.totalBalls >= maxOver &&
-      overProg.legalBalls < 6
+      !body.countsAsLegalDelivery &&
+      (body.extraWide > 0 || body.extraNb > 0) &&
+      overProg.illegalBalls >= maxOver
     ) {
       throw new Error(
-        "Over ball limit reached — choose the bowler for the next over",
+        "Max wides/no-balls per over reached — record a legal delivery",
       );
     }
 
@@ -805,19 +794,6 @@ export async function closeCurrentInnings(writeToken: string) {
   if (m.innings_count === 2 && m.current_innings_index === 1) {
     const nextBatting = opposite(active.batting_side as TeamSide);
 
-    const { data: plist } = await client
-      .from("players")
-      .select("*")
-      .eq("match_id", m.id);
-
-    const allP = (plist ?? []) as DbPlayer[];
-    const lineup = allP
-      .filter((p) => p.side === nextBatting && !p.did_not_bat)
-      .sort((a, b) => a.sort_order - b.sort_order);
-
-    const ns1 = lineup[0]?.id;
-    const ns2 = lineup[1]?.id ?? ns1;
-
     const { error: i2e } = await client.from("innings").insert({
       match_id: m.id,
       index_num: 2,
@@ -826,8 +802,8 @@ export async function closeCurrentInnings(writeToken: string) {
       wickets: 0,
       balls_legal: 0,
       completed: false,
-      current_striker_id: ns1 ?? null,
-      current_non_striker_id: ns2 ?? null,
+      current_striker_id: null,
+      current_non_striker_id: null,
     });
 
     if (i2e) throw new Error(i2e.message);

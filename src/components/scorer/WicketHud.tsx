@@ -1,7 +1,7 @@
 "use client";
 
 import HudModal from "@/components/HudModal";
-import PickerField from "@/components/scorer/PickerField";
+import PickerField, { PickerGroup } from "@/components/scorer/PickerField";
 import {
   DISMISSAL_OPTIONS,
   RUN_OUT_RUNS,
@@ -156,7 +156,7 @@ export default function WicketHud({
           </button>
         </>
       ) : (
-        <>
+        <PickerGroup>
           <button
             type="button"
             className="mb-3 min-h-[44px] text-sm text-emerald-300 underline"
@@ -284,7 +284,7 @@ export default function WicketHud({
               Record wicket
             </button>
           </div>
-        </>
+        </PickerGroup>
       )}
     </HudModal>
   );

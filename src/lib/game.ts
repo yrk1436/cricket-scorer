@@ -96,14 +96,19 @@ export type OverProgress = {
   legalBalls: number;
   /** All deliveries in the current over, including wides/no-balls. */
   totalBalls: number;
+  /** Wides + no-balls this over (not legal). */
+  illegalBalls: number;
   /** True between overs — pick a new bowler before the next delivery. */
   needsNewBowler: boolean;
 };
 
-function isOverComplete(legalBalls: number, totalBalls: number, maxBallsPerOver: number): boolean {
-  if (legalBalls >= 6) return true;
-  if (maxBallsPerOver > 0 && totalBalls >= maxBallsPerOver) return true;
-  return false;
+/** Wide or no-ball — does not count toward the 6 legal balls. */
+export function isWideOrNoBall(d: DbDelivery): boolean {
+  return d.extra_wide > 0 || d.extra_nb > 0;
+}
+
+function isOverComplete(legalBalls: number): boolean {
+  return legalBalls >= 6;
 }
 
 function scoringDeliveriesSorted(deliveries: DbDelivery[]): DbDelivery[] {
@@ -114,24 +119,29 @@ function scoringDeliveriesSorted(deliveries: DbDelivery[]): DbDelivery[] {
 
 function computeOverSlice(
   sorted: DbDelivery[],
-  maxBallsPerOver: number,
-): { startIndex: number; legalBalls: number; totalBalls: number } {
+): { startIndex: number; legalBalls: number; totalBalls: number; illegalBalls: number } {
   let legalBalls = 0;
   let totalBalls = 0;
+  let illegalBalls = 0;
   let startIndex = 0;
 
   for (let i = 0; i < sorted.length; i++) {
     const d = sorted[i];
     totalBalls += 1;
-    if (d.counts_as_legal_delivery) legalBalls += 1;
-    if (isOverComplete(legalBalls, totalBalls, maxBallsPerOver)) {
+    if (d.counts_as_legal_delivery) {
+      legalBalls += 1;
+    } else if (isWideOrNoBall(d)) {
+      illegalBalls += 1;
+    }
+    if (isOverComplete(legalBalls)) {
       legalBalls = 0;
       totalBalls = 0;
+      illegalBalls = 0;
       startIndex = i + 1;
     }
   }
 
-  return { startIndex, legalBalls, totalBalls };
+  return { startIndex, legalBalls, totalBalls, illegalBalls };
 }
 
 /** Deliveries in the over currently being bowled (oldest → newest). */
@@ -140,21 +150,21 @@ export function currentOverDeliveries(
   maxBallsPerOver = 0,
 ): DbDelivery[] {
   const sorted = scoringDeliveriesSorted(deliveries);
-  const { startIndex } = computeOverSlice(sorted, maxBallsPerOver);
+  const { startIndex } = computeOverSlice(sorted);
   return sorted.slice(startIndex);
 }
 
-/** Progress within the current over (0 = unlimited extras cap). */
+/** Progress within the current over. maxBallsPerOver is unused here (illegal cap enforced on delivery). */
 export function currentOverProgress(
   deliveries: DbDelivery[],
-  maxBallsPerOver = 0,
+  _maxBallsPerOver = 0,
 ): OverProgress {
   const sorted = scoringDeliveriesSorted(deliveries);
-  const { legalBalls, totalBalls } = computeOverSlice(sorted, maxBallsPerOver);
+  const { legalBalls, totalBalls, illegalBalls } = computeOverSlice(sorted);
   const needsNewBowler =
     sorted.length > 0 && legalBalls === 0 && totalBalls === 0;
 
-  return { legalBalls, totalBalls, needsNewBowler };
+  return { legalBalls, totalBalls, illegalBalls, needsNewBowler };
 }
 
 /**

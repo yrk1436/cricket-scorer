@@ -1,9 +1,32 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import { createPortal } from "react-dom";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useState,
+  type ReactNode,
+} from "react";
 
 type Option = { id: string; label: string };
+
+type PickerGroupContext = {
+  openId: string | null;
+  setOpenId: (id: string | null) => void;
+};
+
+const PickerGroupContext = createContext<PickerGroupContext | null>(null);
+
+/** Only one PickerField inside the group can be expanded at a time. */
+export function PickerGroup({ children }: { children: ReactNode }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  return (
+    <PickerGroupContext.Provider value={{ openId, setOpenId }}>
+      {children}
+    </PickerGroupContext.Provider>
+  );
+}
 
 type Props = {
   label: string;
@@ -25,9 +48,21 @@ export default function PickerField({
   disabled,
   required,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const group = useContext(PickerGroupContext);
+  const fieldId = useId();
+  const [soloOpen, setSoloOpen] = useState(false);
   const listId = useId();
   const selected = options.find((o) => o.id === value);
+
+  const open = group ? group.openId === fieldId : soloOpen;
+
+  function setOpen(next: boolean) {
+    if (group) {
+      group.setOpenId(next ? fieldId : null);
+    } else {
+      setSoloOpen(next);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -51,7 +86,7 @@ export default function PickerField({
         aria-expanded={open}
         aria-controls={listId}
         aria-haspopup="listbox"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
       >
         <span className={selected ? "" : "picker-placeholder"}>
           {selected?.label ?? placeholder}
