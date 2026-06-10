@@ -154,6 +154,17 @@ export function currentOverDeliveries(
   return sorted.slice(startIndex);
 }
 
+/** Bowler on the last delivery of the previous over. */
+export function bowlerAtEndOfPreviousOver(
+  deliveries: DbDelivery[],
+): string | null {
+  const sorted = scoringDeliveriesSorted(deliveries);
+  const current = currentOverDeliveries(deliveries);
+  const prev = sorted.slice(0, Math.max(0, sorted.length - current.length));
+  if (prev.length === 0) return null;
+  return lastBowlingDelivery(prev)?.bowler_id ?? null;
+}
+
 /** Progress within the current over. maxBallsPerOver is unused here (illegal cap enforced on delivery). */
 export function currentOverProgress(
   deliveries: DbDelivery[],
@@ -181,7 +192,11 @@ export function awaitingNewOverBowler(
   const prog = currentOverProgress(deliveries, maxBallsPerOver);
   if (prog.needsNewBowler) return true;
   if (ballsLegalTotal % 6 !== 0 || prog.legalBalls > 0) return false;
-  return true;
+  if (prog.totalBalls === 0) return true;
+  // Extras-only start to the over — only block if still bowling with last over's bowler.
+  const prevBowler = bowlerAtEndOfPreviousOver(deliveries);
+  const currBowler = lastBowlingDelivery(deliveries)?.bowler_id ?? null;
+  return !!(prevBowler && currBowler === prevBowler);
 }
 
 /** Server: incoming delivery needs a different bowler than the last over. */
