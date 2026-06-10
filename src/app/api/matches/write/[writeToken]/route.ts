@@ -5,6 +5,7 @@ import {
   fetchBundle,
   getMatchByWriteToken,
   needsPinForWrites,
+  reconcileChaseIfNeeded,
 } from "@/lib/match-service";
 
 export async function GET(
@@ -15,6 +16,7 @@ export async function GET(
     const { writeToken } = await ctx.params;
     const m = await getMatchByWriteToken(decodeURIComponent(writeToken));
     if (!m) return bad("Not found", 404);
+    await reconcileChaseIfNeeded(decodeURIComponent(writeToken), m);
     const bundle = await fetchBundle(m);
     const cookie = (await cookies()).get(EDIT_COOKIE_NAME)?.value;
     const locked = needsPinForWrites(bundle.match, cookie);

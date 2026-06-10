@@ -234,12 +234,12 @@ export default function ScorerWorkbench({
         : `Legal ${overProg.legalBalls}/6`;
 
   const strikerStat = useMemo(
-    () => batterStats(activeDels, sim?.strikerId),
-    [activeDels, sim?.strikerId],
+    () => batterStats(activeDels, sim?.strikerId, battingSide, bundle.players),
+    [activeDels, sim?.strikerId, battingSide, bundle.players],
   );
   const nonStrikerStat = useMemo(
-    () => batterStats(activeDels, sim?.nonStrikerId),
-    [activeDels, sim?.nonStrikerId],
+    () => batterStats(activeDels, sim?.nonStrikerId, battingSide, bundle.players),
+    [activeDels, sim?.nonStrikerId, battingSide, bundle.players],
   );
 
   const postDelivery = (body: Record<string, unknown>) =>
@@ -466,6 +466,8 @@ export default function ScorerWorkbench({
           nonStrikerName={pName(sim.nonStrikerId)}
           batsmen={availableBatsmen}
           fielders={bowlers}
+          maxWickets={match.max_wickets}
+          currentWickets={sim.wickets}
           onSubmit={submitWicketPayload}
         />
       )}

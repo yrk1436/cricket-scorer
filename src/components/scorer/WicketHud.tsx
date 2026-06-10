@@ -7,6 +7,7 @@ import {
   RUN_OUT_RUNS,
   type DismissalOption,
 } from "@/lib/delivery-presets";
+import { wicketIncreasesCount } from "@/lib/game";
 import type { DeliveryInput } from "@/lib/match-service";
 import type { DismissalType } from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +26,8 @@ type Props = {
   nonStrikerName: string;
   batsmen: PlayerPick[];
   fielders: PlayerPick[];
+  maxWickets: number;
+  currentWickets: number;
   onSubmit: (payload: Omit<DeliveryInput, "bowlerId">) => void | Promise<void>;
 };
 
@@ -39,6 +42,8 @@ export default function WicketHud({
   nonStrikerName,
   batsmen,
   fielders,
+  maxWickets,
+  currentWickets,
   onSubmit,
 }: Props) {
   const [step, setStep] = useState<"type" | "detail">("type");
@@ -96,6 +101,15 @@ export default function WicketHud({
     [incomingCandidates],
   );
 
+  const allOutAfter = useMemo(
+    () =>
+      wicketIncreasesCount(true, dismissal) &&
+      currentWickets + 1 >= maxWickets,
+    [currentWickets, dismissal, maxWickets],
+  );
+
+  const incomingOptional = incomingCandidates.length === 0 || allOutAfter;
+
   function pickType(opt: DismissalOption) {
     setDismissal(opt.id);
     setOutId(strikerId);
@@ -105,7 +119,7 @@ export default function WicketHud({
   function confirm() {
     if (!option) return;
     if (option.needsFielder && !fielderId) return;
-    if (!incomingId) return;
+    if (!incomingOptional && !incomingId) return;
 
     onSubmit({
       runsOffBat: option.allowRuns ? runsOffBat : 0,
@@ -120,7 +134,7 @@ export default function WicketHud({
       fielderId: option.needsFielder ? fielderId : undefined,
       fielderAssistId:
         option.id === "run_out" && fielderAssistId ? fielderAssistId : undefined,
-      incomingStrikerId: incomingId,
+      incomingStrikerId: incomingId || undefined,
     });
   }
 
@@ -253,15 +267,23 @@ export default function WicketHud({
             </p>
           )}
 
-          <PickerField
-            label="Incoming batter"
-            value={incomingId}
-            onChange={setIncomingId}
-            options={incomingOptions}
-            placeholder="Select…"
-            required
-            disabled={busy}
-          />
+          {incomingOptional ? (
+            <p className="mb-3 text-sm text-amber-200/90">
+              {allOutAfter
+                ? "All out — no incoming batter needed. Innings ends after this wicket."
+                : "No batters left on the bench — record the wicket without a replacement."}
+            </p>
+          ) : (
+            <PickerField
+              label="Incoming batter"
+              value={incomingId}
+              onChange={setIncomingId}
+              options={incomingOptions}
+              placeholder="Select…"
+              required
+              disabled={busy}
+            />
+          )}
 
           <div className="flex gap-2 pt-2">
             <button
@@ -276,12 +298,12 @@ export default function WicketHud({
               disabled={
                 busy ||
                 (option?.needsFielder && !fielderId) ||
-                !incomingId
+                (!incomingOptional && !incomingId)
               }
               className="hud-btn danger flex-1 disabled:opacity-40"
               onClick={() => confirm()}
             >
-              Record wicket
+              {allOutAfter ? "Record wicket (all out)" : "Record wicket"}
             </button>
           </div>
         </PickerGroup>

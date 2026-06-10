@@ -3,11 +3,14 @@ import {
   awaitingNewOverBowler,
   currentOverProgress,
   firstBattingSide,
+  chaseTargetReached,
   lastBowlingDelivery,
+  secondInningsShouldEnd,
   mustChangeBowlerForDelivery,
   opposite,
   replayInnings,
   summarizeResult,
+  wicketIncreasesCount,
 } from "@/lib/game";
 import { isEditUnlockedForMatch } from "@/lib/edit-unlock";
 import type {
@@ -202,6 +205,52 @@ export async function persistInningsState(
     .eq("id", inn.id);
 
   if (error) throw new Error(error.message);
+}
+
+async function maybeAutoFinishLiveMatch(writeToken: string, m: DbMatch) {
+  if (m.status !== "live" || m.innings_count < 2) return;
+
+  const bundle = await fetchBundle(m);
+  const second = bundle.innings.find((i) => i.index_num === 2);
+
+  if (second?.completed) {
+    await completeMatch(writeToken);
+    return;
+  }
+
+  const active =
+    bundle.innings.find(
+      (i) => i.index_num === m.current_innings_index && !i.completed,
+    ) ?? null;
+  if (!active || active.index_num !== 2) return;
+
+  const first = bundle.innings.find((i) => i.index_num === 1);
+  if (!first) return;
+
+  if (
+    !secondInningsShouldEnd({
+      firstInningsRuns: first.runs,
+      currentRuns: active.runs,
+      currentWickets: active.wickets,
+      currentBallsLegal: active.balls_legal,
+      maxWickets: m.max_wickets,
+      oversPerInnings: m.overs_per_innings,
+    })
+  ) {
+    return;
+  }
+
+  await closeCurrentInnings(writeToken);
+}
+
+/** End innings 2 and complete the match when chase is decided. */
+export async function reconcileChaseIfNeeded(
+  writeToken: string,
+  m?: DbMatch,
+) {
+  const match = m ?? (await getMatchByWriteToken(writeToken));
+  if (!match) return;
+  await maybeAutoFinishLiveMatch(writeToken, match);
 }
 
 export async function setOpeningLineup(
@@ -503,6 +552,27 @@ export async function appendDelivery(
   );
   if (!sim) throw new Error("Bad state");
 
+  if (
+    m.status === "live" &&
+    target.index_num === 2 &&
+    !target.completed
+  ) {
+    const first = bundle.innings.find((i) => i.index_num === 1);
+    if (
+      first &&
+      secondInningsShouldEnd({
+        firstInningsRuns: first.runs,
+        currentRuns: sim.runs,
+        currentWickets: sim.wickets,
+        currentBallsLegal: sim.balls_legal,
+        maxWickets: m.max_wickets,
+        oversPerInnings: m.overs_per_innings,
+      })
+    ) {
+      throw new Error("Chase over — innings complete");
+    }
+  }
+
   if (target.current_bowler_id == null && !body.strikeSwap) {
     throw new Error(
       "Set striker, non-striker, and bowler with “Start innings” before scoring",
@@ -602,28 +672,55 @@ export async function appendDelivery(
       fielderAssistInsert = aid;
     }
 
+    const eligibleIncoming = bundle.players.filter(
+      (p) =>
+        p.side === batSide &&
+        !p.did_not_bat &&
+        !sim.dismissedIds.has(p.id) &&
+        p.id !== sim.strikerId &&
+        p.id !== sim.nonStrikerId &&
+        p.id !== dismissedInsert,
+    );
+
+    const allOutAfter =
+      wicketIncreasesCount(body.isWicket, body.dismissal) &&
+      sim.wickets + 1 >= m.max_wickets;
+    const requiresIncoming = !allOutAfter && eligibleIncoming.length > 0;
+
     const inc = body.incomingStrikerId;
-    if (!inc) {
-      throw new Error(
-        body.dismissal === "retired_hurt"
-          ? "Choose who replaces the retired-not-out batter at the crease"
-          : "Choose who comes in after the wicket",
-      );
+    if (requiresIncoming) {
+      if (!inc) {
+        throw new Error(
+          body.dismissal === "retired_hurt"
+            ? "Choose who replaces the retired-not-out batter at the crease"
+            : "Choose who comes in after the wicket",
+        );
+      }
+      const incP = bundle.players.find((p) => p.id === inc);
+      if (!incP || incP.side !== batSide || incP.did_not_bat) {
+        throw new Error(
+          "Incoming batter must be on the batting team and not marked DNB",
+        );
+      }
+      if (inc === sim.strikerId || inc === sim.nonStrikerId) {
+        throw new Error("Incoming batter cannot already be at the crease");
+      }
+      if (sim.dismissedIds.has(inc)) {
+        throw new Error("That player is already out");
+      }
+      if (inc === dismissedInsert) {
+        throw new Error("Incoming batter cannot be the player leaving the crease");
+      }
+      incomingInsert = inc;
+    } else if (inc) {
+      const incP = bundle.players.find((p) => p.id === inc);
+      if (!incP || incP.side !== batSide || incP.did_not_bat) {
+        throw new Error(
+          "Incoming batter must be on the batting team and not marked DNB",
+        );
+      }
+      incomingInsert = inc;
     }
-    const incP = bundle.players.find((p) => p.id === inc);
-    if (!incP || incP.side !== batSide || incP.did_not_bat) {
-      throw new Error("Incoming batter must be on the batting team and not marked DNB");
-    }
-    if (inc === sim.strikerId || inc === sim.nonStrikerId) {
-      throw new Error("Incoming batter cannot already be at the crease");
-    }
-    if (sim.dismissedIds.has(inc)) {
-      throw new Error("That player is already out");
-    }
-    if (inc === dismissedInsert) {
-      throw new Error("Incoming batter cannot be the player leaving the crease");
-    }
-    incomingInsert = inc;
   }
 
   const nextOrder =
@@ -687,7 +784,9 @@ export async function appendDelivery(
     maxOver,
   );
 
-  if (m.status === "completed") {
+  if (m.status === "live") {
+    await maybeAutoFinishLiveMatch(writeToken, m);
+  } else if (m.status === "completed") {
     await recomputeAllInningsAndSummary(m.id);
   }
 }
@@ -818,6 +917,10 @@ export async function closeCurrentInnings(writeToken: string) {
   }
 
   /* Single-innings tournament or second closed */
+  if (m.innings_count === 2 && active.index_num === 2) {
+    await completeMatch(writeToken);
+  }
+
   return { closed: active.index_num, next: null as number | null };
 }
 

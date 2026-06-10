@@ -34,8 +34,10 @@ export function totalRunsOnDelivery(d: DbDelivery): number {
 function deliveryRotatesStrike(d: DbDelivery): boolean {
   if (d.is_strike_swap || d.is_wicket) return false;
   if (!d.counts_as_legal_delivery) {
+    // NB penalty (1) doesn't rotate — only runs off the bat.
     if (d.extra_nb > 0) return d.runs_off_bat % 2 === 1;
-    if (d.extra_wide > 0) return d.extra_wide % 2 === 1;
+    // Wide penalty (1) doesn't rotate — only additional runs batsmen take.
+    if (d.extra_wide > 0) return (d.extra_wide - 1) % 2 === 1;
     return false;
   }
   const offExtras = d.runs_off_bat + d.extra_byes + (d.extra_leg_byes ?? 0);
@@ -361,21 +363,113 @@ export function runRate(runs: number, ballsLegal: number): number {
 
 export type BatterStat = { runs: number; balls: number };
 
-/** Runs off bat and legal balls faced while on strike. */
+function bumpBatterStat(
+  stats: Map<string, BatterStat>,
+  id: string,
+  runs: number,
+  balls: number,
+) {
+  const cur = stats.get(id) ?? { runs: 0, balls: 0 };
+  stats.set(id, { runs: cur.runs + runs, balls: cur.balls + balls });
+}
+
+/** Runs off bat and legal balls faced — replay for strike rotation, striker_id per delivery for scoring. */
 export function batterStats(
   deliveries: DbDelivery[],
   playerId: string | null | undefined,
+  battingSide: TeamSide,
+  allPlayers: DbPlayer[],
 ): BatterStat {
   if (!playerId) return { runs: 0, balls: 0 };
-  let runs = 0;
-  let balls = 0;
-  for (const d of deliveries) {
-    if (d.is_strike_swap) continue;
-    if (d.striker_id !== playerId) continue;
-    if (d.counts_as_legal_delivery) balls += 1;
-    runs += d.runs_off_bat;
+
+  const lineup = eligibleBatters(battingSide, allPlayers);
+  const sorted = [...deliveries]
+    .filter((d) => !d.is_strike_swap)
+    .sort((a, b) => a.display_order - b.display_order);
+
+  if (sorted.length === 0) return { runs: 0, balls: 0 };
+
+  let strikerId = sorted[0].striker_id ?? "";
+  let nonStrikerId = sorted[0].non_striker_id ?? strikerId;
+  const dismissedIds = new Set<string>();
+  const stats = new Map<string, BatterStat>();
+
+  for (let i = 0; i < sorted.length; i++) {
+    const d = sorted[i];
+    if (d.is_strike_swap) {
+      [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
+      continue;
+    }
+
+    const onStrike = d.striker_id ?? strikerId;
+    if (d.counts_as_legal_delivery) {
+      bumpBatterStat(stats, onStrike, d.runs_off_bat, 1);
+    } else if (d.extra_nb > 0) {
+      // No-ball: runs off bat + 1 ball faced (illegal for the over, like Cricbuzz).
+      bumpBatterStat(stats, onStrike, d.runs_off_bat, 1);
+    }
+
+    const prevProg = currentOverProgress(sorted.slice(0, i));
+    const currProg = currentOverProgress(sorted.slice(0, i + 1));
+    const endOver = currProg.needsNewBowler && !prevProg.needsNewBowler;
+
+    const outId =
+      d.dismissed_batsman_id ?? d.striker_id ?? strikerId;
+
+    if (d.is_wicket) {
+      if (d.dismissal !== "retired_hurt") dismissedIds.add(outId);
+
+      let next: string | null = null;
+      const inc = d.incoming_striker_id;
+      if (
+        inc &&
+        !dismissedIds.has(inc) &&
+        inc !== strikerId &&
+        inc !== nonStrikerId &&
+        inc !== outId &&
+        lineup.some((p) => p.id === inc)
+      ) {
+        next = inc;
+      }
+      if (next == null) {
+        const vacatedEnd =
+          outId === nonStrikerId ? "non_striker" : "striker";
+        next = nextBatId(
+          lineup,
+          dismissedIds,
+          new Set(
+            vacatedEnd === "non_striker" ? [strikerId] : [nonStrikerId],
+          ),
+        );
+      }
+
+      if (outId === nonStrikerId) {
+        nonStrikerId = next ?? strikerId;
+        if (nonStrikerId === strikerId) {
+          const pick = lineup.find(
+            (p) => !dismissedIds.has(p.id) && p.id !== strikerId,
+          );
+          if (pick) nonStrikerId = pick.id;
+        }
+      } else {
+        strikerId = next ?? nonStrikerId;
+        if (next == null || strikerId === nonStrikerId) {
+          const pick = lineup.find((p) => !dismissedIds.has(p.id));
+          if (pick) strikerId = pick.id;
+        }
+      }
+
+      if (endOver) [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
+      continue;
+    }
+
+    if (deliveryRotatesStrike(d))
+      [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
+
+    if (endOver) [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
   }
-  return { runs, balls };
+
+  return stats.get(playerId) ?? { runs: 0, balls: 0 };
 }
 
 export type ChaseInfo = {
@@ -411,6 +505,46 @@ export function chaseInfo(params: {
   const rrr = ballsLeft > 0 ? (need / ballsLeft) * 6 : need > 0 ? Infinity : 0;
   const rr = runRate(currentRuns, currentBallsLegal);
   return { target, need, ballsLeft, wicketsLeft, rrr, rr };
+}
+
+/** Second innings: runs to win (first innings total + 1). */
+export function chaseTarget(firstInningsRuns: number): number {
+  return firstInningsRuns + 1;
+}
+
+export function chaseTargetReached(
+  inningsCount: number,
+  inningsIndex: number,
+  firstInningsRuns: number | undefined,
+  currentRuns: number,
+  completed: boolean,
+): boolean {
+  if (completed || inningsCount < 2 || inningsIndex !== 2) return false;
+  if (firstInningsRuns === undefined) return false;
+  return currentRuns >= chaseTarget(firstInningsRuns);
+}
+
+/** Chase innings over: target reached, all out, or overs exhausted. */
+export function secondInningsShouldEnd(params: {
+  firstInningsRuns: number;
+  currentRuns: number;
+  currentWickets: number;
+  currentBallsLegal: number;
+  maxWickets: number;
+  oversPerInnings: number;
+}): boolean {
+  const {
+    firstInningsRuns,
+    currentRuns,
+    currentWickets,
+    currentBallsLegal,
+    maxWickets,
+    oversPerInnings,
+  } = params;
+  if (currentRuns >= chaseTarget(firstInningsRuns)) return true;
+  if (currentWickets >= maxWickets) return true;
+  if (currentBallsLegal >= oversPerInnings * 6) return true;
+  return false;
 }
 
 export type InnLike = {
@@ -458,6 +592,13 @@ export function summarizeResult(params: {
     return {
       winnerSide: chasing,
       summary: `${nameOf(chasing)} won chasing (${r2}/${in2.wickets} vs ${r1})`,
+    };
+  }
+
+  if (r2 === r1) {
+    return {
+      winnerSide: "tie" as const,
+      summary: `Match tied (${r1} each · ${nameOf(in1.batting_side)} ${r1}/${in1.wickets}, ${nameOf(chasing)} ${r2}/${in2.wickets})`,
     };
   }
 

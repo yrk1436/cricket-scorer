@@ -51,9 +51,9 @@ export default function HeroScore({
     isChase && !inn.completed
       ? chaseInfo({
           firstInningsRuns: first.runs,
-          currentRuns: inn.runs,
-          currentWickets: inn.wickets,
-          currentBallsLegal: inn.balls_legal,
+          currentRuns: runs,
+          currentWickets: wickets,
+          currentBallsLegal: ballsLegal,
           oversPerInnings: match.overs_per_innings,
           maxWickets: match.max_wickets,
         })

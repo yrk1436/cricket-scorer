@@ -16,7 +16,7 @@ type Props = {
 };
 
 function miniStat(runs: number, balls: number): string | null {
-  if (balls <= 0 && runs <= 0) return null;
+  if (balls < 1) return null;
   return `${runs} (${balls})`;
 }
 
