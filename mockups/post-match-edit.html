@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mockup — Correction studio (use cases)</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+    <nav class="mock-nav">
+      <a href="index.html">Overview</a>
+      <a href="scorer-home.html">Scorer home</a>
+      <a href="post-match-edit.html" class="active">Correction studio</a>
+      <a href="admin-matches.html">Admin</a>
+    </nav>
+
+    <div class="edit-shell edit-shell-wide">
+      <header class="edit-header glass">
+        <div>
+          <p class="edit-eyebrow">Correction studio · PIN unlocked</p>
+          <h1>Sparta XI vs Karma XI</h1>
+          <p class="edit-meta">
+            Match complete · edits replay innings &amp; refresh scorecard
+          </p>
+        </div>
+        <div class="edit-header-actions">
+          <select class="admin-sort" aria-label="Innings">
+            <option>Innings 1 — Sparta XI (118/10)</option>
+            <option>Innings 2 — Karma XI (119/9)</option>
+          </select>
+          <a href="public-scorecard.html" class="chip-btn">Preview ↗</a>
+        </div>
+      </header>
+
+      <!-- ── Use case gallery ── -->
+      <section class="usecase-section glass">
+        <h2 class="usecase-heading">Common fixes</h2>
+        <p class="usecase-intro">
+          Tap a scenario below — the studio jumps to the right tool. All examples
+          from real club scoring mistakes.
+        </p>
+        <div class="usecase-grid">
+          <a href="#uc-wrong-batter" class="usecase-card">
+            <span class="usecase-icon">👤</span>
+            <h3>Wrong batter at crease</h3>
+            <p>Post-match: pick wrong batter → correct name; runs, balls, and out move over.</p>
+            <span class="usecase-tag">Crease tab</span>
+          </a>
+          <a href="#uc-runs-wrong-player" class="usecase-card">
+            <span class="usecase-icon">4️⃣</span>
+            <h3>Runs on wrong batsman</h3>
+            <p>Roop’s four credited to Suman. Edit ball → change <em>striker faced</em>.</p>
+            <span class="usecase-tag">Ball edit</span>
+          </a>
+          <a href="#uc-wrong-runs" class="usecase-card">
+            <span class="usecase-icon">🔢</span>
+            <h3>Wrong run value</h3>
+            <p>Tapped 6 instead of 4, or dot recorded as 1. Fix runs off bat / extras.</p>
+            <span class="usecase-tag">Ball edit</span>
+          </a>
+          <a href="#uc-wide-nb" class="usecase-card">
+            <span class="usecase-icon">wd</span>
+            <h3>Wide / no-ball mistake</h3>
+            <p>Legal ball marked wide, or nb+6 runs split wrong. Toggle extra type &amp; counts-as-legal.</p>
+            <span class="usecase-tag">Extras</span>
+          </a>
+          <a href="#uc-wrong-bowler-over" class="usecase-card">
+            <span class="usecase-icon">🎯</span>
+            <h3>Wrong bowler for over</h3>
+            <p>Whole over bowled by Shikhar but logged as Rahul. <strong>Change bowler</strong> on over header.</p>
+            <span class="usecase-tag">Bulk · over</span>
+          </a>
+          <a href="#uc-wrong-bowler-ball" class="usecase-card">
+            <span class="usecase-icon">⚾</span>
+            <h3>Wrong bowler one ball</h3>
+            <p>Single delivery attributed to wrong arm. Edit that ball’s bowler only.</p>
+            <span class="usecase-tag">Ball edit</span>
+          </a>
+          <a href="#uc-wicket-striker" class="usecase-card">
+            <span class="usecase-icon">W</span>
+            <h3>Out was non-striker</h3>
+            <p>Run-out at wrong end. Change <em>who is out</em> + fielder if needed.</p>
+            <span class="usecase-tag">Wicket</span>
+          </a>
+          <a href="#uc-wicket-type" class="usecase-card">
+            <span class="usecase-icon">🧤</span>
+            <h3>Wrong dismissal / fielder</h3>
+            <p>Caught → bowled, or wrong catcher. Fix dismissal + fielder (+ assist for run-out).</p>
+            <span class="usecase-tag">Wicket</span>
+          </a>
+          <a href="#uc-incoming" class="usecase-card">
+            <span class="usecase-icon">↪</span>
+            <h3>Wrong incoming batter</h3>
+            <p>After wicket, wrong player walked in. Edit wicket ball → incoming batter.</p>
+            <span class="usecase-tag">Wicket</span>
+          </a>
+          <a href="#uc-retired" class="usecase-card">
+            <span class="usecase-icon">🚶</span>
+            <h3>Retired hurt / out</h3>
+            <p>Recorded as wicket but was retired not out (or vice versa). Changes wicket count.</p>
+            <span class="usecase-tag">Wicket</span>
+          </a>
+          <a href="#uc-strike-swap" class="usecase-card">
+            <span class="usecase-icon">⇄</span>
+            <h3>Strike not swapped</h3>
+            <p>Odd runs but ends didn’t change. Insert <em>strike swap</em> between balls.</p>
+            <span class="usecase-tag">Insert</span>
+          </a>
+          <a href="#uc-missing-ball" class="usecase-card">
+            <span class="usecase-icon">＋</span>
+            <h3>Missing ball</h3>
+            <p>Forgot to score a delivery. Insert before/after on timeline.</p>
+            <span class="usecase-tag">Insert</span>
+          </a>
+          <a href="#uc-duplicate" class="usecase-card">
+            <span class="usecase-icon">✕</span>
+            <h3>Duplicate ball</h3>
+            <p>Same delivery scored twice. Delete ball (confirm) — totals recalc.</p>
+            <span class="usecase-tag">Delete</span>
+          </a>
+          <a href="#uc-byes-lb" class="usecase-card">
+            <span class="usecase-icon">lb</span>
+            <h3>Byes / leg-byes</h3>
+            <p>Runs should be byes not off bat, or leg-bye amount wrong.</p>
+            <span class="usecase-tag">Extras</span>
+          </a>
+          <a href="#uc-squad-name" class="usecase-card">
+            <span class="usecase-icon">✏️</span>
+            <h3>Player name typo</h3>
+            <p>“Geethal” vs “Geethal W”. Squad rename — stats stay on same ID.</p>
+            <span class="usecase-tag">Squad</span>
+          </a>
+          <a href="#uc-dnb" class="usecase-card">
+            <span class="usecase-icon">DNB</span>
+            <h3>Did not bat flag</h3>
+            <p>Sub didn’t play but listed in card. Mark DNB in squad admin.</p>
+            <span class="usecase-tag">Squad</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- ── Live studio (timeline) ── -->
+      <section class="edit-tabs glass">
+        <button type="button" class="active">Ball timeline</button>
+        <button type="button">Crease</button>
+        <button type="button">Bowlers</button>
+        <button type="button">Wickets</button>
+        <button type="button">Squad</button>
+      </section>
+
+      <section id="uc-wrong-batter" class="edit-crease glass">
+        <p class="section-title">Crease · replace batter (use case 1)</p>
+        <div class="crease-row">
+          <button type="button" class="crease-pill striker edit-tap">
+            <span class="label">Striker</span>
+            <span class="name">Ashok</span>
+            <span class="runs-mini">0 (1)</span>
+            <span class="edit-hint">Replace</span>
+          </button>
+          <button type="button" class="crease-pill edit-tap">
+            <span class="label">Non-striker</span>
+            <span class="name">Mohit</span>
+            <span class="runs-mini">7 (11)</span>
+            <span class="edit-hint">Replace</span>
+          </button>
+        </div>
+        <p class="usecase-inline-hint">
+          <strong>Scenario:</strong> Meant Geethal at striker; Ashok faced 3 balls and was out.
+          Correct batter Ashok → Geethal — runs, balls, and the dismissal all move to Geethal.
+          Same rule when replacing at the crease during a live innings (dismissal only applies post-out).
+        </p>
+      </section>
+
+      <section class="edit-timeline">
+        <details class="over-block glass" open>
+          <summary>
+            <span class="over-label">Over 4</span>
+            <span class="over-bowler">Sourav</span>
+            <span class="over-runs">10 runs · 1 nb</span>
+            <button type="button" class="over-change-bowler" id="uc-wrong-bowler-over" onclick="event.preventDefault()">
+              Change bowler → Shikhar
+            </button>
+          </summary>
+          <ul class="ball-timeline">
+            <li class="ball-row" id="uc-wide-nb">
+              <span class="ball nb">nb+4</span>
+              <div class="ball-detail">
+                <p class="ball-line"><b>4.2</b> Sourav → Mohit · no-ball + 4 off bat</p>
+                <p class="ball-sub">Illegal · 1 ball faced · 5 total runs</p>
+              </div>
+              <button type="button" class="ball-edit-btn">Edit</button>
+            </li>
+            <li class="ball-row" id="uc-runs-wrong-player">
+              <span class="ball run">4</span>
+              <div class="ball-detail">
+                <p class="ball-line"><b>4.3</b> Sourav → <s>Mohit</s> <b>Roop</b> · 4 runs</p>
+                <p class="ball-sub warn">Striker corrected — was wrong end</p>
+              </div>
+              <button type="button" class="ball-edit-btn active">Edit</button>
+            </li>
+            <li class="ball-row" id="uc-byes-lb">
+              <span class="ball wide">wd</span>
+              <div class="ball-detail">
+                <p class="ball-line"><b>4.4</b> Sourav → Roop · wide + 2 runs</p>
+                <p class="ball-sub">Wide penalty + batsmen ran 1</p>
+              </div>
+              <button type="button" class="ball-edit-btn">Edit</button>
+            </li>
+          </ul>
+        </details>
+
+        <details class="over-block glass" open>
+          <summary>
+            <span class="over-label">Over 8</span>
+            <span class="over-bowler">Ritwik</span>
+            <span class="over-runs">2 runs · 1 wkt</span>
+          </summary>
+          <ul class="ball-timeline">
+            <li class="ball-row" id="uc-wicket-striker">
+              <span class="ball wicket">W</span>
+              <div class="ball-detail">
+                <p class="ball-line"><b>8.4</b> Ritwik → run out <b>non-striker</b> Geethal (Sourav/Shailesh)</p>
+                <p class="ball-sub">1 run completed before break</p>
+              </div>
+              <button type="button" class="ball-edit-btn">Edit</button>
+            </li>
+          </ul>
+        </details>
+      </section>
+
+      <!-- ── Scenario panels: different edit sheets ── -->
+      <section class="scenario-panels">
+        <h2 class="usecase-heading" style="padding: 0 4px">Edit panels by scenario</h2>
+
+        <!-- UC: runs wrong player -->
+        <article id="uc-wrong-runs" class="edit-sheet glass scenario-panel">
+          <p class="scenario-label">Use case · Runs on wrong batsman</p>
+          <h2>Edit ball 4.3</h2>
+          <p class="edit-sheet-sub">Change who faced the ball — Roop gets the 4, Mohit loses 4 runs &amp; 1 ball.</p>
+          <label class="field">
+            <span>Striker (faced this ball)</span>
+            <select>
+              <option>Mohit G (was wrong)</option>
+              <option selected>Roop Y (correct)</option>
+            </select>
+          </label>
+          <div class="impact-banner">
+            <strong>Impact:</strong> Mohit 7→3 (10 balls→9) · Roop 38→42 (27→28)
+          </div>
+          <button type="button" class="btn-primary">Save</button>
+        </article>
+
+        <!-- UC: wrong run value -->
+        <article class="edit-sheet glass scenario-panel">
+          <p class="scenario-label">Use case · Wrong run value</p>
+          <h2>Edit ball 12.5</h2>
+          <p class="edit-sheet-sub">Tapped 6 on pad; was actually a two.</p>
+          <div class="field-row">
+            <label class="field">
+              <span>Runs off bat</span>
+              <input type="number" value="2" min="0" max="6" />
+            </label>
+            <label class="field">
+              <span>Was</span>
+              <input type="text" value="6" disabled style="opacity: 0.5" />
+            </label>
+          </div>
+          <div class="impact-banner">Innings total 118 → 114 · re-check chase target</div>
+          <button type="button" class="btn-primary">Save</button>
+        </article>
+
+        <!-- UC: wide / nb -->
+        <article class="edit-sheet glass scenario-panel">
+          <p class="scenario-label">Use case · Wide / no-ball</p>
+          <h2>Edit ball 4.2</h2>
+          <p class="edit-sheet-sub">Was a legal dot, not a no-ball.</p>
+          <div class="extra-toggle-row">
+            <label class="extra-chip"><input type="checkbox" checked /> No-ball</label>
+            <label class="extra-chip"><input type="checkbox" /> Wide</label>
+            <label class="extra-chip"><input type="checkbox" /> Legal delivery</label>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span>NB penalty runs</span>
+              <input type="number" value="0" />
+            </label>
+            <label class="field">
+              <span>Runs off bat</span>
+              <input type="number" value="0" />
+            </label>
+          </div>
+          <div class="impact-banner">Over illegal count −1 · legal balls +1 · bowler figures change</div>
+          <button type="button" class="btn-primary">Save</button>
+        </article>
+
+        <!-- UC: wrong bowler over -->
+        <article class="edit-sheet glass scenario-panel">
+          <p class="scenario-label">Use case · Wrong bowler for whole over</p>
+          <h2>Reassign over 4</h2>
+          <p class="edit-sheet-sub">All 7 deliveries in this over → new bowler.</p>
+          <label class="field">
+            <span>Bowler for entire over</span>
+            <select>
+              <option>Sourav M (current)</option>
+              <option selected>Shikhar M (correct)</option>
+            </select>
+          </label>
+          <div class="impact-banner">
+            Sourav 2.0-0-18-0 → 1.0-0-8-0 · Shikhar gains 1 over
+          </div>
+          <button type="button" class="btn-primary">Apply to over</button>
+        </article>
+
+        <!-- UC: wicket -->
+        <article id="uc-wicket-type" class="edit-sheet glass scenario-panel">
+          <p class="scenario-label">Use case · Wicket details</p>
+          <h2>Edit ball 15.2 · caught</h2>
+          <div class="field-row">
+            <label class="field">
+              <span>Who is out?</span>
+              <select>
+                <option selected>Striker — Suman</option>
+                <option>Non-striker — Roop</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Dismissal</span>
+              <select>
+                <option selected>Caught</option>
+                <option>Bowled</option>
+                <option>Run out</option>
+                <option>Retired not out</option>
+              </select>
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span>Fielder</span>
+              <select>
+                <option selected>Rahul D</option>
+                <option>Abhik S</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Assist (run-out)</span>
+              <select disabled>
+                <option>—</option>
+              </select>
+            </label>
+          </div>
+          <label class="field" id="uc-incoming">
+            <span>Incoming batter</span>
+            <select>
+              <option selected>Niran P</option>
+              <option>Arpan S</option>
+            </select>
+          </label>
+          <button type="button" class="btn-primary">Save wicket</button>
+        </article>
+
+        <!-- UC: insert / delete -->
+        <article id="uc-missing-ball" class="edit-sheet glass scenario-panel">
+          <p class="scenario-label">Use case · Insert / delete / strike swap</p>
+          <h2>Ball actions on 8.3</h2>
+          <p class="edit-sheet-sub">Gap between 8.2 and 8.4 — single missing, or extra duplicate.</p>
+          <div class="edit-sheet-actions" style="margin-top: 0">
+            <button type="button" class="chip-btn swap" id="uc-strike-swap">⇄ Insert strike swap</button>
+            <button type="button" class="chip-btn extra">＋ Insert ball before</button>
+            <button type="button" class="chip-btn extra">＋ Insert ball after</button>
+            <button type="button" class="chip-btn wicket" id="uc-duplicate">✕ Delete this ball</button>
+          </div>
+          <p class="usecase-inline-hint" style="margin-top: 12px">
+            Delete shows confirm: “Remove ball 8.3 (1 run)? Totals and batter stats will recalc.”
+          </p>
+        </article>
+
+        <!-- UC: squad -->
+        <article id="uc-squad-name" class="edit-sheet glass scenario-panel">
+          <p class="scenario-label">Use case · Squad (names &amp; DNB)</p>
+          <h2>Player list</h2>
+          <ul class="squad-edit-list">
+            <li>
+              <span class="side">A</span>
+              <input type="text" value="Geethal Withanachchi" />
+              <label class="dnb-check"><input type="checkbox" /> DNB</label>
+            </li>
+            <li>
+              <span class="side">A</span>
+              <input type="text" value="Roop Yekollu" />
+              <label class="dnb-check"><input type="checkbox" /> DNB</label>
+            </li>
+            <li>
+              <span class="side">B</span>
+              <input type="text" value="Shikar Mathur" />
+              <label class="dnb-check"><input type="checkbox" checked /> DNB</label>
+            </li>
+          </ul>
+          <p class="usecase-inline-hint">Rename does not move runs. DNB hides from batter pickers.</p>
+        </article>
+      </section>
+
+      <section class="glass recalc-banner">
+        <p class="section-title" style="margin-bottom: 6px">After any save</p>
+        <ul class="recalc-list">
+          <li>Replay innings → team total, overs, RR</li>
+          <li>Recompute every batter &amp; bowler line on scorecard</li>
+          <li>Fall of wickets &amp; result (margin / tie / chase)</li>
+          <li>Public share link updates on refresh — no new URL</li>
+        </ul>
+      </section>
+
+      <p class="edit-footer-note">
+        Mock only — scroll to <a href="#uc-wrong-batter">use cases</a>. Production
+        studio opens one sheet at a time from timeline selection.
+      </p>
+    </div>
+  </body>
+</html>

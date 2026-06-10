@@ -20,6 +20,9 @@ export type ReplayStrikeSeed = {
   nonStrikerId: string;
 };
 
+/** Delivery note for mid-innings crease correction (no ball, no wicket). */
+export const CREASE_REPLACE_NOTE = "crease_replace";
+
 /** Runs scored from one delivery row (excluding wicket meta). */
 export function totalRunsOnDelivery(d: DbDelivery): number {
   return (
@@ -255,6 +258,25 @@ export function replayInnings(
     const d = sorted[i];
     if (d.is_strike_swap) {
       [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
+      continue;
+    }
+
+    if (d.note === CREASE_REPLACE_NOTE) {
+      const outId = d.dismissed_batsman_id ?? strikerId;
+      const next = d.incoming_striker_id;
+      if (next && !dismissedIds.has(next)) {
+        if (outId === nonStrikerId) {
+          nonStrikerId = next;
+        } else {
+          strikerId = next;
+        }
+        if (strikerId === nonStrikerId) {
+          const pick = lineup.find(
+            (p) => !dismissedIds.has(p.id) && p.id !== strikerId,
+          );
+          if (pick) nonStrikerId = pick.id;
+        }
+      }
       continue;
     }
 

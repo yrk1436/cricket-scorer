@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mockup — Scorer home (recent + new)</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+    <nav class="mock-nav">
+      <a href="index.html">Overview</a>
+      <a href="scorer-home.html" class="active">Scorer home</a>
+      <a href="create-match.html">Create match</a>
+      <a href="admin-matches.html">Admin</a>
+    </nav>
+
+    <div class="phone-shell">
+      <header class="top-bar">
+        <h1>Cricket scorer</h1>
+        <span class="badge">Home</span>
+      </header>
+
+      <!-- Recent from localStorage -->
+      <section class="recent-scorecards glass">
+        <h2 class="recent-title">Recent on this device</h2>
+        <p class="recent-sub">
+          No login — your browser remembers matches you created or opened here.
+        </p>
+        <ul class="recent-list">
+          <li class="recent-item">
+            <div class="recent-item-head">
+              <p class="recent-teams">
+                <strong>Sparta XI</strong> vs <strong>Karma XI</strong>
+              </p>
+              <span class="badge done">Done</span>
+            </div>
+            <p class="recent-result">Karma XI won chasing (119/9 vs 118)</p>
+            <p class="recent-when">Jun 10 · 10:38 AM</p>
+            <div class="recent-links">
+              <a href="post-match-edit.html" class="recent-link primary">View / edit</a>
+              <a href="public-scorecard.html" class="recent-link">Share ↗</a>
+              <button type="button" class="recent-link ghost">Remove</button>
+            </div>
+          </li>
+          <li class="recent-item">
+            <div class="recent-item-head">
+              <p class="recent-teams">
+                <strong>Sparta XI</strong> vs <strong>Newton CC</strong>
+              </p>
+              <span class="badge live">Live</span>
+            </div>
+            <p class="recent-when">Jun 8 · 2:15 PM</p>
+            <div class="recent-links">
+              <a href="live-scorer.html" class="recent-link primary">Resume scoring</a>
+              <a href="public-scorecard.html" class="recent-link">Share ↗</a>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="home-cta glass">
+        <h2 style="margin: 0 0 6px; font-size: 1.1rem">New match</h2>
+        <p style="margin: 0 0 14px; font-size: 0.82rem; color: var(--muted)">
+          Set teams, squads, PIN. You’ll get a secret scorer link — bookmark it.
+        </p>
+        <a href="create-match.html" class="btn-primary" style="display: block; text-align: center; text-decoration: none">
+          Create match
+        </a>
+      </section>
+
+      <section class="home-flow glass" style="padding: 14px 16px">
+        <p class="section-title">After the game</p>
+        <ol class="flow-steps">
+          <li>Everyone sees the <strong>read-only scorecard</strong> (share link).</li>
+          <li>Scorer opens their <strong>secret link</strong> → same card + PIN box.</li>
+          <li>Enter PIN → scoring pad or <strong>correction studio</strong> (future).</li>
+        </ol>
+      </section>
+
+      <p class="admin-footer-note" style="padding: 0 4px">
+        Admin: <a href="admin-matches.html">/admin-scorecards</a> lists all matches
+        (server). Recent list is device-only cache.
+      </p>
+    </div>
+  </body>
+</html>

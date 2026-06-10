@@ -11,6 +11,8 @@ type Props = {
   overStatus: string;
   bowlerPickPending?: boolean;
   onPickBowler?: () => void;
+  onReplaceStriker?: () => void;
+  onReplaceNonStriker?: () => void;
   disabled?: boolean;
   onSwap: () => void;
 };
@@ -31,6 +33,8 @@ export default function CreaseBar({
   overStatus,
   bowlerPickPending,
   onPickBowler,
+  onReplaceStriker,
+  onReplaceNonStriker,
   disabled,
   onSwap,
 }: Props) {
@@ -42,7 +46,19 @@ export default function CreaseBar({
       <div className="crease-bar">
         <div className="crease-pill striker">
           <p className="label">Striker</p>
-          <p className="name">{strikerName}</p>
+          {onReplaceStriker ? (
+            <button
+              type="button"
+              className="crease-name-btn"
+              disabled={disabled}
+              onClick={onReplaceStriker}
+              title="Replace striker"
+            >
+              {strikerName}
+            </button>
+          ) : (
+            <p className="name">{strikerName}</p>
+          )}
           {strikerMini && <p className="runs-mini">{strikerMini}</p>}
         </div>
         <button
@@ -57,7 +73,19 @@ export default function CreaseBar({
         </button>
         <div className="crease-pill">
           <p className="label">Non-striker</p>
-          <p className="name">{nonStrikerName}</p>
+          {onReplaceNonStriker ? (
+            <button
+              type="button"
+              className="crease-name-btn"
+              disabled={disabled}
+              onClick={onReplaceNonStriker}
+              title="Replace non-striker"
+            >
+              {nonStrikerName}
+            </button>
+          ) : (
+            <p className="name">{nonStrikerName}</p>
+          )}
           {nonStrikerMini && <p className="runs-mini">{nonStrikerMini}</p>}
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   awaitingNewOverBowler,
+  CREASE_REPLACE_NOTE,
   currentOverProgress,
   firstBattingSide,
   chaseTargetReached,
@@ -965,6 +966,277 @@ export async function completeMatch(writeToken: string) {
     .eq("id", m.id);
 
   if (error) throw new Error(error.message);
+}
+
+export type AdminMatchListRow = {
+  id: string;
+  public_id: string;
+  write_token: string;
+  team_a_name: string;
+  team_b_name: string;
+  status: MatchStatus;
+  overs_per_innings: number;
+  innings_count: number;
+  result_summary: string | null;
+  created_at: string;
+  innings: {
+    index_num: number;
+    runs: number;
+    wickets: number;
+    balls_legal: number;
+    completed: boolean;
+    batting_side: TeamSide;
+  }[];
+};
+
+export async function listMatchesForAdmin(params: {
+  q?: string;
+  status?: "all" | "live" | "completed";
+  sort?: "date_desc" | "date_asc" | "team_asc";
+  limit?: number;
+}): Promise<AdminMatchListRow[]> {
+  const { q, status = "all", sort = "date_desc", limit = 50 } = params;
+  let query = sb()
+    .from("matches")
+    .select(
+      "id, public_id, write_token, team_a_name, team_b_name, status, overs_per_innings, innings_count, result_summary, created_at",
+    )
+    .limit(Math.min(limit, 100));
+
+  if (status === "live") query = query.eq("status", "live");
+  if (status === "completed") query = query.eq("status", "completed");
+
+  if (q?.trim()) {
+    const term = `%${q.trim()}%`;
+    query = query.or(
+      `team_a_name.ilike.${term},team_b_name.ilike.${term},result_summary.ilike.${term}`,
+    );
+  }
+
+  if (sort === "date_asc") {
+    query = query.order("created_at", { ascending: true });
+  } else if (sort === "team_asc") {
+    query = query.order("team_a_name", { ascending: true });
+  } else {
+    query = query.order("created_at", { ascending: false });
+  }
+
+  const { data: matches, error } = await query;
+  if (error) throw new Error(error.message);
+  if (!matches?.length) return [];
+
+  const ids = matches.map((m) => m.id as string);
+  const { data: innings, error: iErr } = await sb()
+    .from("innings")
+    .select("match_id, index_num, runs, wickets, balls_legal, completed, batting_side")
+    .in("match_id", ids)
+    .order("index_num");
+
+  if (iErr) throw new Error(iErr.message);
+
+  const byMatch = new Map<string, AdminMatchListRow["innings"]>();
+  for (const inn of innings ?? []) {
+    const mid = inn.match_id as string;
+    if (!byMatch.has(mid)) byMatch.set(mid, []);
+    byMatch.get(mid)!.push({
+      index_num: inn.index_num as number,
+      runs: inn.runs as number,
+      wickets: inn.wickets as number,
+      balls_legal: inn.balls_legal as number,
+      completed: inn.completed as boolean,
+      batting_side: inn.batting_side as TeamSide,
+    });
+  }
+
+  return matches.map((m) => ({
+    id: m.id as string,
+    public_id: m.public_id as string,
+    write_token: m.write_token as string,
+    team_a_name: m.team_a_name as string,
+    team_b_name: m.team_b_name as string,
+    status: m.status as MatchStatus,
+    overs_per_innings: m.overs_per_innings as number,
+    innings_count: m.innings_count as number,
+    result_summary: (m.result_summary as string | null) ?? null,
+    created_at: m.created_at as string,
+    innings: byMatch.get(m.id as string) ?? [],
+  }));
+}
+
+async function insertCreaseReplaceDelivery(
+  inningsId: string,
+  dels: DbDelivery[],
+  sim: { strikerId: string; nonStrikerId: string },
+  leavingId: string,
+  incomingId: string,
+) {
+  const nextOrder =
+    dels.length === 0 ? 1 : Math.max(...dels.map((d) => d.display_order)) + 1;
+
+  const { error } = await sb().from("deliveries").insert({
+    innings_id: inningsId,
+    display_order: nextOrder,
+    striker_id: sim.strikerId,
+    non_striker_id: sim.nonStrikerId,
+    bowler_id: null,
+    incoming_striker_id: incomingId,
+    is_strike_swap: false,
+    runs_off_bat: 0,
+    extra_wide: 0,
+    extra_nb: 0,
+    extra_byes: 0,
+    extra_leg_byes: 0,
+    dismissed_batsman_id: leavingId,
+    fielder_id: null,
+    fielder_assist_id: null,
+    counts_as_legal_delivery: false,
+    is_wicket: false,
+    dismissal: "none" as DismissalType,
+    note: CREASE_REPLACE_NOTE,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Re-attribute every ball from the leaving batter to the incoming one. */
+async function retroactivelyReassignBatterOnDeliveries(
+  dels: DbDelivery[],
+  leavingId: string,
+  incomingId: string,
+) {
+  for (const d of dels) {
+    if (d.is_strike_swap || d.note === CREASE_REPLACE_NOTE) continue;
+
+    const patch: {
+      striker_id?: string;
+      non_striker_id?: string;
+      incoming_striker_id?: string;
+      dismissed_batsman_id?: string;
+    } = {};
+
+    if (d.striker_id === leavingId) patch.striker_id = incomingId;
+    if (d.non_striker_id === leavingId) patch.non_striker_id = incomingId;
+    if (d.incoming_striker_id === leavingId) patch.incoming_striker_id = incomingId;
+    if (d.dismissed_batsman_id === leavingId) {
+      patch.dismissed_batsman_id = incomingId;
+    }
+
+    if (Object.keys(patch).length === 0) continue;
+
+    const { error: uErr } = await sb()
+      .from("deliveries")
+      .update(patch)
+      .eq("id", d.id);
+    if (uErr) throw new Error(uErr.message);
+  }
+}
+
+export async function replaceCreasePlayer(
+  writeToken: string,
+  payload: {
+    end?: "striker" | "non_striker";
+    leavingPlayerId?: string;
+    incomingPlayerId: string;
+  },
+  unlockCookie?: string,
+) {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  const isCompleted = m.status === "completed";
+
+  if (isCompleted && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  const bundle = await fetchBundle(m);
+  const target =
+    m.status === "completed"
+      ? lastInningsByIndex(bundle)
+      : await getActiveInnings(m, bundle.innings);
+  if (!target) throw new Error("No innings to update");
+
+  const dels = bundle.deliveriesByInningsId[target.id] ?? [];
+  const batSide = target.batting_side as TeamSide;
+  const sim = replayInnings(
+    batSide,
+    bundle.players,
+    dels,
+    target.current_striker_id && target.current_non_striker_id
+      ? {
+          strikerId: target.current_striker_id,
+          nonStrikerId: target.current_non_striker_id,
+        }
+      : null,
+    m.max_balls_per_over ?? 0,
+  );
+  if (!sim) throw new Error("Cannot read crease state");
+
+  const inc = payload.incomingPlayerId;
+  let leavingId: string;
+  let creaseEnd: "striker" | "non_striker" | null = null;
+  let otherId: string | null = null;
+
+  if (payload.leavingPlayerId) {
+    if (!isCompleted) {
+      throw new Error("Pick the crease end to replace during live scoring");
+    }
+    leavingId = payload.leavingPlayerId;
+    const leaveP = bundle.players.find((p) => p.id === leavingId);
+    if (!leaveP || leaveP.side !== batSide) {
+      throw new Error("Recorded batter must be on the batting team");
+    }
+  } else {
+    if (!payload.end) throw new Error("end required");
+    creaseEnd = payload.end;
+    leavingId = creaseEnd === "striker" ? sim.strikerId : sim.nonStrikerId;
+    otherId = creaseEnd === "striker" ? sim.nonStrikerId : sim.strikerId;
+    if (inc === otherId) throw new Error("Other batter is already at the crease");
+  }
+
+  if (inc === leavingId) throw new Error("Pick a different batter");
+
+  const incP = bundle.players.find((p) => p.id === inc);
+  if (!incP || incP.side !== batSide || incP.did_not_bat) {
+    throw new Error("Replacement must be on the batting team and not DNB");
+  }
+
+  if (!isCompleted && sim.dismissedIds.has(inc)) {
+    throw new Error("That player is already out");
+  }
+
+  await retroactivelyReassignBatterOnDeliveries(dels, leavingId, inc);
+
+  const leavingOnCrease =
+    leavingId === sim.strikerId || leavingId === sim.nonStrikerId;
+
+  if (leavingOnCrease && dels.length > 0) {
+    await insertCreaseReplaceDelivery(target.id, dels, sim, leavingId, inc);
+  } else if (leavingOnCrease && dels.length === 0 && creaseEnd) {
+    const newStriker = creaseEnd === "striker" ? inc : otherId ?? sim.strikerId;
+    const newNonStriker =
+      creaseEnd === "non_striker" ? inc : otherId ?? sim.nonStrikerId;
+    const { error: cErr } = await sb()
+      .from("innings")
+      .update({
+        current_striker_id: newStriker,
+        current_non_striker_id: newNonStriker,
+      })
+      .eq("id", target.id);
+    if (cErr) throw new Error(cErr.message);
+  }
+
+  const refreshed = await fetchBundle(m);
+  const realDels = refreshed.deliveriesByInningsId[target.id] ?? [];
+  await persistInningsState(
+    refreshed.innings.find((i) => i.id === target.id)!,
+    refreshed.players,
+    realDels,
+    m.max_balls_per_over ?? 0,
+  );
+
+  if (isCompleted) {
+    await recomputeAllInningsAndSummary(m.id);
+  }
 }
 
 /** Public helpers — server-only */

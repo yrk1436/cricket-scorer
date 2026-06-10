@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mockup — Admin · All matches</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+  <!--
+    Admin backdoor mockup — static HTML/CSS only.
+    Flow: secret URL + admin key → searchable list of all matches → scorecard / scorer links.
+  -->
+
+    <nav class="mock-nav">
+      <a href="index.html">Overview</a>
+      <a href="live-scorer.html">Live scorer</a>
+      <a href="create-match.html">Create match</a>
+      <a href="public-scorecard.html">Public scorecard</a>
+      <a href="admin-matches.html" class="active">Admin</a>
+    </nav>
+
+    <div class="admin-shell">
+      <!-- Gate (shown on first visit — toggle .is-unlocked on .admin-shell to see list) -->
+      <section class="admin-gate glass is-unlocked-demo">
+        <div class="admin-gate-icon" aria-hidden="true">🔐</div>
+        <h1>Admin access</h1>
+        <p class="sub">
+          Secret route <code>/admin-scorecards</code> · not linked from the public app.
+        </p>
+        <form class="admin-gate-form" action="#" onsubmit="return false">
+          <label class="field">
+            <span>Admin key</span>
+            <input
+              type="password"
+              placeholder="From ADMIN_SECRET env"
+              value="••••••••••••"
+              autocomplete="off"
+            />
+          </label>
+          <button type="submit" class="btn-primary">Unlock match list</button>
+        </form>
+        <p class="admin-gate-hint">
+          Mockup note: remove class <code>is-unlocked-demo</code> on
+          <code>.admin-gate</code> to preview the locked state.
+        </p>
+      </section>
+
+      <!-- Main list (after unlock) -->
+      <div class="admin-main is-unlocked-demo">
+        <header class="admin-header">
+          <div>
+            <h1>All matches</h1>
+            <p class="sub">Signed in · session 2h · <a href="#">Sign out</a></p>
+          </div>
+          <a href="create-match.html" class="btn-primary admin-new-btn">+ New match</a>
+        </header>
+
+        <section class="admin-stats glass">
+          <div class="admin-stat">
+            <span class="n">12</span>
+            <span class="l">Total</span>
+          </div>
+          <div class="admin-stat">
+            <span class="n live-n">1</span>
+            <span class="l">Live</span>
+          </div>
+          <div class="admin-stat">
+            <span class="n">11</span>
+            <span class="l">Completed</span>
+          </div>
+          <div class="admin-stat">
+            <span class="n">Jun 10</span>
+            <span class="l">Latest</span>
+          </div>
+        </section>
+
+        <section class="admin-toolbar glass">
+          <label class="admin-search">
+            <span class="sr-only">Search</span>
+            <input type="search" placeholder="Team name, result…" value="Sparta" />
+          </label>
+          <div class="admin-filters" role="tablist">
+            <button type="button" class="active" role="tab">All</button>
+            <button type="button" role="tab">Live</button>
+            <button type="button" role="tab">Completed</button>
+          </div>
+        </section>
+
+        <ul class="match-list">
+          <li class="match-card glass">
+            <div class="match-card-top">
+              <div>
+                <h2>Sparta XI <span class="vs">vs</span> Karma XI</h2>
+                <p class="match-meta">16 overs · 2 innings · Jun 10, 2026 · 10:38 AM</p>
+              </div>
+              <span class="badge done">Completed</span>
+            </div>
+            <p class="match-scores">
+              <span><strong>118/10</strong> <small>(15.4)</small></span>
+              <span class="vs">·</span>
+              <span><strong>119/9</strong> <small>(15.4)</small></span>
+            </p>
+            <p class="match-result">Karma XI won chasing (119/9 vs 118)</p>
+            <div class="match-links">
+              <a href="public-scorecard.html" class="match-link primary">Scorecard ↗</a>
+              <a href="live-scorer.html" class="match-link">Scorer pad ↗</a>
+              <button type="button" class="match-link ghost">Copy public</button>
+              <button type="button" class="match-link ghost">Copy scorer</button>
+            </div>
+            <details class="match-admin-details">
+              <summary>IDs &amp; debug</summary>
+              <dl>
+                <dt>public_id</dt>
+                <dd><code>3cc87b9f-1c68-4f52-a5a3-e4886d619ad6</code></dd>
+                <dt>write_token</dt>
+                <dd><code>rd561sO4oNay7c-SddqF9yXopZZJzzYg</code></dd>
+              </dl>
+            </details>
+          </li>
+
+          <li class="match-card glass">
+            <div class="match-card-top">
+              <div>
+                <h2>Sparta XI <span class="vs">vs</span> Newton CC</h2>
+                <p class="match-meta">20 overs · 2 innings · Jun 8, 2026 · 2:15 PM</p>
+              </div>
+              <span class="badge live">Live</span>
+            </div>
+            <p class="match-scores">
+              <span><strong>142/3</strong> <small>(15.2)</small></span>
+              <span class="vs">·</span>
+              <span class="match-chase">chasing 186</span>
+            </p>
+            <p class="match-result muted">Innings 2 in progress · Need 44 from 28</p>
+            <div class="match-links">
+              <a href="public-scorecard.html" class="match-link primary">Scorecard ↗</a>
+              <a href="live-scorer.html" class="match-link">Scorer pad ↗</a>
+              <button type="button" class="match-link ghost">Copy public</button>
+              <button type="button" class="match-link ghost">Copy scorer</button>
+            </div>
+          </li>
+
+          <li class="match-card glass">
+            <div class="match-card-top">
+              <div>
+                <h2>Weekenders A <span class="vs">vs</span> Weekenders B</h2>
+                <p class="match-meta">10 overs · 2 innings · May 31, 2026</p>
+              </div>
+              <span class="badge done">Completed</span>
+            </div>
+            <p class="match-scores">
+              <span><strong>89/7</strong> <small>(10.0)</small></span>
+              <span class="vs">·</span>
+              <span><strong>90/6</strong> <small>(9.4)</small></span>
+            </p>
+            <p class="match-result">Weekenders B won by 4 wickets</p>
+            <div class="match-links">
+              <a href="public-scorecard.html" class="match-link primary">Scorecard ↗</a>
+              <a href="live-scorer.html" class="match-link">Scorer pad ↗</a>
+              <button type="button" class="match-link ghost">Copy public</button>
+              <button type="button" class="match-link ghost">Copy scorer</button>
+            </div>
+          </li>
+
+          <li class="match-card glass dimmed">
+            <div class="match-card-top">
+              <div>
+                <h2>Practice XI <span class="vs">vs</span> Nets Squad</h2>
+                <p class="match-meta">8 overs · 1 innings · May 20, 2026</p>
+              </div>
+              <span class="badge done">Completed</span>
+            </div>
+            <p class="match-scores">
+              <span><strong>67/4</strong> <small>(8.0)</small></span>
+            </p>
+            <p class="match-result muted">Single innings friendly</p>
+            <div class="match-links">
+              <a href="public-scorecard.html" class="match-link primary">Scorecard ↗</a>
+              <a href="live-scorer.html" class="match-link">Scorer pad ↗</a>
+              <button type="button" class="match-link ghost">Copy public</button>
+              <button type="button" class="match-link ghost">Copy scorer</button>
+            </div>
+          </li>
+        </ul>
+
+        <p class="admin-footer-note">
+          Production: protect with <code>ADMIN_SECRET</code> header or cookie;
+          list from Supabase <code>matches</code> ordered by <code>created_at desc</code>.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

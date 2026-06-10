@@ -8,7 +8,10 @@ import ExtrasHud from "@/components/scorer/ExtrasHud";
 import HeroScore from "@/components/scorer/HeroScore";
 import PickerField, { PickerGroup } from "@/components/scorer/PickerField";
 import ScoringPad from "@/components/scorer/ScoringPad";
+import CompletedMatchView from "@/components/CompletedMatchView";
+import ReplaceBatterHud from "@/components/ReplaceBatterHud";
 import WicketHud from "@/components/scorer/WicketHud";
+import { rememberMatch, touchRecentMatch } from "@/lib/recent-matches";
 import {
   awaitingNewOverBowler,
   batterStats,
@@ -57,7 +60,6 @@ export default function ScorerWorkbench({
   const [locked, setLocked] = useState(initiallyLocked);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [pin, setPin] = useState("");
   const [showSquad, setShowSquad] = useState(false);
   const [extrasHudOpen, setExtrasHudOpen] = useState(false);
   const [overPick, setOverPick] = useState({
@@ -66,6 +68,11 @@ export default function ScorerWorkbench({
     ready: false,
   });
   const [wicketHudOpen, setWicketHudOpen] = useState(false);
+  const [replaceHud, setReplaceHud] = useState<{
+    open: boolean;
+    end?: "striker" | "non_striker";
+    pickLeaving?: boolean;
+  }>({ open: false, end: "striker" });
   const [bowlerHudOpen, setBowlerHudOpen] = useState(false);
   const [openingHudOpen, setOpeningHudOpen] = useState(true);
   const prevNeedsBowlerRef = useRef(false);
@@ -85,9 +92,35 @@ export default function ScorerWorkbench({
       error?: string;
     };
     if (!r.ok) throw new Error(j.error ?? "Reload failed");
-    if (j.bundle) setBundle(j.bundle);
+    if (j.bundle) {
+      setBundle(j.bundle);
+      touchRecentMatch(j.bundle.match.public_id, {
+        teamAName: j.bundle.match.team_a_name,
+        teamBName: j.bundle.match.team_b_name,
+        status: j.bundle.match.status,
+        resultSummary: j.bundle.match.result_summary,
+      });
+    }
     if (typeof j.locked === "boolean") setLocked(j.locked);
   }, [apiRoot]);
+
+  useEffect(() => {
+    rememberMatch({
+      publicId: match.public_id,
+      writeToken,
+      teamAName: match.team_a_name,
+      teamBName: match.team_b_name,
+      status: match.status,
+      resultSummary: match.result_summary,
+    });
+  }, [
+    match.public_id,
+    match.team_a_name,
+    match.team_b_name,
+    match.status,
+    match.result_summary,
+    writeToken,
+  ]);
 
   const exec = async (fn: () => Promise<void>): Promise<boolean> => {
     setBusy(true);
@@ -325,27 +358,6 @@ export default function ScorerWorkbench({
     return batsmen.filter((p) => !sim.dismissedIds.has(p.id));
   }, [batsmen, sim]);
 
-  async function unlock(ev: React.FormEvent) {
-    ev.preventDefault();
-    setBusy(true);
-    setErr(null);
-    try {
-      const r = await fetch(`${apiRoot}/unlock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Unlock failed");
-      setPin("");
-      await refresh();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function confirmNewOverBowler() {
     if (!overPick.bowlingId) {
       setErr("Pick a bowler for this over");
@@ -362,6 +374,44 @@ export default function ScorerWorkbench({
 
   const statusBadge =
     match.status === "live" ? "live" : match.status === "completed" ? "done" : "";
+
+  const battersInInnings = useMemo(() => {
+    const ids = new Set<string>();
+    for (const d of activeDels) {
+      if (d.is_strike_swap || d.note === "crease_replace") continue;
+      if (d.striker_id) ids.add(d.striker_id);
+      if (d.non_striker_id) ids.add(d.non_striker_id);
+      if (d.dismissed_batsman_id) ids.add(d.dismissed_batsman_id);
+      if (d.incoming_striker_id) ids.add(d.incoming_striker_id);
+    }
+    return batsmen.filter((p) => ids.has(p.id));
+  }, [activeDels, batsmen]);
+
+  const replaceCandidates = useMemo(() => {
+    if (!sim) return [];
+    if (replaceHud.pickLeaving || match.status === "completed") {
+      return batsmen.filter((p) => !p.did_not_bat);
+    }
+    return batsmen.filter(
+      (p) =>
+        p.id !== sim.strikerId &&
+        p.id !== sim.nonStrikerId &&
+        !sim.dismissedIds.has(p.id),
+    );
+  }, [batsmen, match.status, replaceHud.pickLeaving, sim]);
+
+  if (match.status === "completed" && locked) {
+    return (
+      <CompletedMatchView
+        bundle={bundle}
+        writeToken={writeToken}
+        onUnlocked={async () => {
+          setLocked(false);
+          await refresh();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="phone-shell">
@@ -451,6 +501,47 @@ export default function ScorerWorkbench({
         onSubmit={submitExtra}
       />
 
+      {sim && (
+        <ReplaceBatterHud
+          open={replaceHud.open}
+          busy={busy}
+          pickLeaving={replaceHud.pickLeaving}
+          end={replaceHud.end}
+          leavingName={
+            replaceHud.end
+              ? pName(
+                  replaceHud.end === "striker"
+                    ? sim.strikerId
+                    : sim.nonStrikerId,
+                )
+              : undefined
+          }
+          leavingOptions={
+            replaceHud.pickLeaving ? battersInInnings : undefined
+          }
+          candidates={replaceCandidates}
+          onClose={() => setReplaceHud((h) => ({ ...h, open: false }))}
+          onConfirm={async ({ incomingPlayerId, leavingPlayerId }) => {
+            const ok = await exec(async () => {
+              const body: Record<string, string> = { incomingPlayerId };
+              if (replaceHud.pickLeaving && leavingPlayerId) {
+                body.leavingPlayerId = leavingPlayerId;
+              } else if (replaceHud.end) {
+                body.end = replaceHud.end;
+              }
+              const r = await fetch(`${apiRoot}/crease`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              });
+              const j = await r.json();
+              if (!r.ok) throw new Error(j.error ?? "Replace failed");
+            });
+            if (ok) setReplaceHud((h) => ({ ...h, open: false }));
+          }}
+        />
+      )}
+
       {sim && targetInnings && (
         <WicketHud
           open={wicketHudOpen}
@@ -487,31 +578,6 @@ export default function ScorerWorkbench({
         !(wicketHudOpen) && (
           <div className="error-banner no-print">{err}</div>
         )}
-
-      {match.status === "completed" && locked && (
-        <form onSubmit={unlock} className="glass no-print" style={{ padding: 16 }}>
-          <p className="mb-2 text-sm font-medium">Match finished — enter PIN to edit</p>
-          <div className="field-row">
-            <div className="field" style={{ marginBottom: 0 }}>
-              <input
-                type="password"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="PIN"
-                autoComplete="off"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={busy || !pin}
-              className="hud-btn primary"
-              style={{ alignSelf: "end" }}
-            >
-              Unlock
-            </button>
-          </div>
-        </form>
-      )}
 
       {match.status === "completed" && !locked && (
         <div className="chase-bar ok no-print">Editing unlocked</div>
@@ -551,6 +617,16 @@ export default function ScorerWorkbench({
           overStatus={overStatus}
           bowlerPickPending={needsBowlerPick}
           onPickBowler={openBowlerPicker}
+          onReplaceStriker={
+            padUnlocked && allowPad && match.status === "live"
+              ? () => setReplaceHud({ open: true, end: "striker" })
+              : undefined
+          }
+          onReplaceNonStriker={
+            padUnlocked && allowPad && match.status === "live"
+              ? () => setReplaceHud({ open: true, end: "non_striker" })
+              : undefined
+          }
           disabled={busy || !padUnlocked}
           onSwap={() => void postDelivery({ strikeSwap: true })}
         />
@@ -604,6 +680,17 @@ export default function ScorerWorkbench({
         >
           Undo
         </button>
+        {match.status === "completed" && allowPad && (
+          <button
+            type="button"
+            disabled={busy || battersInInnings.length === 0}
+            onClick={() =>
+              setReplaceHud({ open: true, pickLeaving: true })
+            }
+          >
+            Correct batter
+          </button>
+        )}
         <button
           type="button"
           disabled={busy || !canCloseInnings}

@@ -1,5 +1,7 @@
 "use client";
 
+import RecentScorecards from "@/components/RecentScorecards";
+import { rememberMatch } from "@/lib/recent-matches";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -60,6 +62,13 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
       };
       if (!r.ok) throw new Error(j.error ?? "Create failed");
       if (!j.writeToken) throw new Error("No write token");
+      rememberMatch({
+        publicId: j.publicId ?? "",
+        writeToken: j.writeToken,
+        teamAName: teamA.trim(),
+        teamBName: teamB.trim(),
+        status: "live",
+      });
       router.push(`/score/${encodeURIComponent(j.writeToken)}`);
     } catch (x) {
       setErr(x instanceof Error ? x.message : String(x));
@@ -74,6 +83,8 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
         <h1>New match</h1>
         <span className="badge">Setup</span>
       </header>
+
+      <RecentScorecards />
 
       <form onSubmit={submit} className="form-card glass">
         <h2>Start scoring</h2>

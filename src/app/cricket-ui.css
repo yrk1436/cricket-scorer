@@ -1098,6 +1098,334 @@
   color: var(--muted);
 }
 
+.cricket-app .crease-name-btn {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(52, 211, 153, 0.35);
+  text-underline-offset: 3px;
+}
+
+.cricket-app .crease-name-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cricket-app .recent-scorecards {
+  padding: 14px 16px;
+}
+
+.cricket-app .recent-title {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.cricket-app .recent-sub {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.cricket-app .recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cricket-app .recent-item {
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border);
+}
+
+.cricket-app .recent-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cricket-app .recent-teams {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.cricket-app .recent-result {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--accent);
+}
+
+.cricket-app .recent-when {
+  margin: 4px 0 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.cricket-app .recent-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cricket-app .recent-link {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.cricket-app .recent-link.primary {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.cricket-app .recent-link.ghost {
+  background: transparent;
+}
+
+.cricket-app .admin-shell {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding: 16px 14px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cricket-app .admin-gate {
+  padding: 28px 22px;
+  text-align: center;
+  max-width: 400px;
+  margin: 24px auto;
+}
+
+.cricket-app .admin-gate h1 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+}
+
+.cricket-app .admin-gate .sub {
+  margin: 0 0 20px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.cricket-app .admin-gate .sub code {
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
+.cricket-app .admin-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cricket-app .admin-header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.cricket-app .admin-header .sub {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.cricket-app .admin-new-btn {
+  width: auto;
+  margin: 0;
+  padding: 10px 16px;
+  font-size: 0.82rem;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+}
+
+.cricket-app .admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 14px;
+}
+
+.cricket-app .admin-stat {
+  text-align: center;
+}
+
+.cricket-app .admin-stat .n {
+  display: block;
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.cricket-app .admin-stat .n.live-n {
+  color: #fca5a5;
+}
+
+.cricket-app .admin-stat .l {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cricket-app .admin-toolbar {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cricket-app .admin-toolbar-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cricket-app .admin-filters {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+
+.cricket-app .admin-filters button {
+  flex: 1;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cricket-app .admin-filters button.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.cricket-app .admin-sort {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card-solid);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.cricket-app .match-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cricket-app .match-card {
+  padding: 16px;
+}
+
+.cricket-app .match-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cricket-app .match-card h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.cricket-app .match-card h2 .vs {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.cricket-app .match-meta {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.cricket-app .match-scores {
+  margin: 8px 0;
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.cricket-app .match-result {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+
+.cricket-app .match-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cricket-app .match-link {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font);
+  background: transparent;
+}
+
+.cricket-app .match-link.primary {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.cricket-app .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
 @media print {
   .cricket-app {
     background: #fff;
