@@ -1,6 +1,7 @@
 import {
   ballsToOvers,
   eligibleBatters,
+  RETIRE_HURT_NOTE,
   runRate,
   totalRunsOnDelivery,
   wicketIncreasesCount,
@@ -139,6 +140,7 @@ function computeBatting(
     fours: number;
     sixes: number;
     out: boolean;
+    retiredHurt: boolean;
     dismissal: string;
     batted: boolean;
     order: number;
@@ -152,6 +154,7 @@ function computeBatting(
       fours: 0,
       sixes: 0,
       out: false,
+      retiredHurt: false,
       dismissal: "did not bat",
       batted: false,
       order: p.sort_order,
@@ -202,10 +205,34 @@ function computeBatting(
       const a = acc.get(outId);
       if (a) {
         if (d.dismissal === "retired_hurt") {
+          a.retiredHurt = true;
           a.dismissal = "retired not out";
         } else {
           a.out = true;
           a.dismissal = formatDismissal(d, name);
+        }
+      }
+      if (d.incoming_striker_id) {
+        const inc = acc.get(d.incoming_striker_id);
+        if (inc?.retiredHurt) {
+          inc.retiredHurt = false;
+        }
+      }
+    }
+
+    if (d.note === RETIRE_HURT_NOTE && d.dismissed_batsman_id) {
+      const retiringId = d.dismissed_batsman_id;
+      markBatted(retiringId);
+      const a = acc.get(retiringId);
+      if (a && !a.out) {
+        a.retiredHurt = true;
+        a.dismissal = "retired not out";
+      }
+      if (d.incoming_striker_id) {
+        markBatted(d.incoming_striker_id);
+        const inc = acc.get(d.incoming_striker_id);
+        if (inc?.retiredHurt) {
+          inc.retiredHurt = false;
         }
       }
     }
@@ -215,6 +242,16 @@ function computeBatting(
   for (const p of lineup) {
     const a = acc.get(p.id)!;
     const sr = a.balls > 0 ? (a.runs / a.balls) * 100 : 0;
+    let dismissal: string;
+    if (!a.batted) {
+      dismissal = "did not bat";
+    } else if (a.out) {
+      dismissal = a.dismissal;
+    } else if (a.retiredHurt) {
+      dismissal = "retired not out";
+    } else {
+      dismissal = "not out";
+    }
     rows.push({
       playerId: p.id,
       name: p.display_name,
@@ -224,7 +261,7 @@ function computeBatting(
       sixes: a.sixes,
       strikeRate: sr,
       out: a.out,
-      dismissal: a.batted ? (a.out ? a.dismissal : "not out") : "did not bat",
+      dismissal,
       didNotBat: !a.batted,
     });
   }

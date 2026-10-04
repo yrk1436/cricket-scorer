@@ -10,6 +10,7 @@ import PickerField, { PickerGroup } from "@/components/scorer/PickerField";
 import ScoringPad from "@/components/scorer/ScoringPad";
 import CompletedMatchView from "@/components/CompletedMatchView";
 import ReplaceBatterHud from "@/components/ReplaceBatterHud";
+import RetireHurtHud from "@/components/RetireHurtHud";
 import WicketHud from "@/components/scorer/WicketHud";
 import { rememberMatch, touchRecentMatch } from "@/lib/recent-matches";
 import {
@@ -68,6 +69,7 @@ export default function ScorerWorkbench({
     ready: false,
   });
   const [wicketHudOpen, setWicketHudOpen] = useState(false);
+  const [retireHurtHudOpen, setRetireHurtHudOpen] = useState(false);
   const [replaceHud, setReplaceHud] = useState<{
     open: boolean;
     end?: "striker" | "non_striker";
@@ -358,6 +360,16 @@ export default function ScorerWorkbench({
     return batsmen.filter((p) => !sim.dismissedIds.has(p.id));
   }, [batsmen, sim]);
 
+  const retireHurtCandidates = useMemo(() => {
+    if (!sim) return [];
+    return batsmen.filter(
+      (p) =>
+        p.id !== sim.strikerId &&
+        p.id !== sim.nonStrikerId &&
+        !sim.dismissedIds.has(p.id),
+    );
+  }, [batsmen, sim]);
+
   function confirmNewOverBowler() {
     if (!overPick.bowlingId) {
       setErr("Pick a bowler for this over");
@@ -563,6 +575,29 @@ export default function ScorerWorkbench({
         />
       )}
 
+      {sim && targetInnings && (
+        <RetireHurtHud
+          open={retireHurtHudOpen}
+          busy={busy}
+          strikerName={pName(sim.strikerId)}
+          nonStrikerName={pName(sim.nonStrikerId)}
+          candidates={retireHurtCandidates}
+          onClose={() => setRetireHurtHudOpen(false)}
+          onConfirm={async ({ end, replacementPlayerId }) => {
+            const ok = await exec(async () => {
+              const r = await fetch(`${apiRoot}/retire-hurt`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ end, replacementPlayerId }),
+              });
+              const j = await r.json();
+              if (!r.ok) throw new Error(j.error ?? "Retire hurt failed");
+            });
+            if (ok) setRetireHurtHudOpen(false);
+          }}
+        />
+      )}
+
       <header className="top-bar no-print">
         <div>
           <h1>Scoring</h1>
@@ -680,6 +715,15 @@ export default function ScorerWorkbench({
         >
           Undo
         </button>
+        {match.status === "live" && padUnlocked && sim && (
+          <button
+            type="button"
+            disabled={busy || retireHurtCandidates.length === 0}
+            onClick={() => setRetireHurtHudOpen(true)}
+          >
+            Retire hurt
+          </button>
+        )}
         {match.status === "completed" && allowPad && (
           <button
             type="button"

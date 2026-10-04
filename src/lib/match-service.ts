@@ -2,6 +2,7 @@ import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   awaitingNewOverBowler,
   CREASE_REPLACE_NOTE,
+  RETIRE_HURT_NOTE,
   currentOverProgress,
   firstBattingSide,
   chaseTargetReached,
@@ -1097,6 +1098,40 @@ async function insertCreaseReplaceDelivery(
   if (error) throw new Error(error.message);
 }
 
+async function insertRetireHurtDelivery(
+  inningsId: string,
+  dels: DbDelivery[],
+  sim: { strikerId: string; nonStrikerId: string },
+  retiringId: string,
+  replacementId: string,
+) {
+  const nextOrder =
+    dels.length === 0 ? 1 : Math.max(...dels.map((d) => d.display_order)) + 1;
+
+  const { error } = await sb().from("deliveries").insert({
+    innings_id: inningsId,
+    display_order: nextOrder,
+    striker_id: sim.strikerId,
+    non_striker_id: sim.nonStrikerId,
+    bowler_id: null,
+    incoming_striker_id: replacementId,
+    is_strike_swap: false,
+    runs_off_bat: 0,
+    extra_wide: 0,
+    extra_nb: 0,
+    extra_byes: 0,
+    extra_leg_byes: 0,
+    dismissed_batsman_id: retiringId,
+    fielder_id: null,
+    fielder_assist_id: null,
+    counts_as_legal_delivery: false,
+    is_wicket: false,
+    dismissal: "none" as DismissalType,
+    note: RETIRE_HURT_NOTE,
+  });
+  if (error) throw new Error(error.message);
+}
+
 /** Re-attribute every ball from the leaving batter to the incoming one. */
 async function retroactivelyReassignBatterOnDeliveries(
   dels: DbDelivery[],
@@ -1237,6 +1272,106 @@ export async function replaceCreasePlayer(
   if (isCompleted) {
     await recomputeAllInningsAndSummary(m.id);
   }
+}
+
+/**
+ * Retire a batter hurt (injury or illness) between balls.
+ * This is not a dismissal — wickets do not increase.
+ * The batter can return later when a new batter is required.
+ */
+export async function retireBatterHurt(
+  writeToken: string,
+  payload: {
+    end: "striker" | "non_striker";
+    replacementPlayerId: string;
+  },
+) {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status !== "live") {
+    throw new Error("Retired hurt can only be recorded during a live match");
+  }
+
+  const bundle = await fetchBundle(m);
+  const target = await getActiveInnings(m, bundle.innings);
+  if (!target) throw new Error("No active innings");
+
+  const dels = bundle.deliveriesByInningsId[target.id] ?? [];
+  const batSide = target.batting_side as TeamSide;
+  const sim = replayInnings(
+    batSide,
+    bundle.players,
+    dels,
+    target.current_striker_id && target.current_non_striker_id
+      ? {
+          strikerId: target.current_striker_id,
+          nonStrikerId: target.current_non_striker_id,
+        }
+      : null,
+    m.max_balls_per_over ?? 0,
+  );
+  if (!sim) throw new Error("Cannot read crease state");
+
+  const retiringId =
+    payload.end === "striker" ? sim.strikerId : sim.nonStrikerId;
+  const otherId = payload.end === "striker" ? sim.nonStrikerId : sim.strikerId;
+  const replacementId = payload.replacementPlayerId;
+
+  if (replacementId === retiringId) {
+    throw new Error("Replacement must be different from the retiring batter");
+  }
+  if (replacementId === otherId) {
+    throw new Error("That batter is already at the crease");
+  }
+
+  const retiringP = bundle.players.find((p) => p.id === retiringId);
+  if (!retiringP || retiringP.side !== batSide) {
+    throw new Error("Invalid batter to retire");
+  }
+
+  const replacementP = bundle.players.find((p) => p.id === replacementId);
+  if (!replacementP || replacementP.side !== batSide) {
+    throw new Error("Replacement must be on the batting team");
+  }
+  if (replacementP.did_not_bat) {
+    throw new Error("Replacement is marked as did-not-bat");
+  }
+  if (sim.dismissedIds.has(replacementId)) {
+    throw new Error("That player is already out");
+  }
+
+  if (dels.length === 0) {
+    const newStriker =
+      payload.end === "striker" ? replacementId : sim.strikerId;
+    const newNonStriker =
+      payload.end === "non_striker" ? replacementId : sim.nonStrikerId;
+    const { error: cErr } = await sb()
+      .from("innings")
+      .update({
+        current_striker_id: newStriker,
+        current_non_striker_id: newNonStriker,
+      })
+      .eq("id", target.id);
+    if (cErr) throw new Error(cErr.message);
+  } else {
+    await insertRetireHurtDelivery(
+      target.id,
+      dels,
+      sim,
+      retiringId,
+      replacementId,
+    );
+  }
+
+  const refreshed = await fetchBundle(m);
+  const realDels = refreshed.deliveriesByInningsId[target.id] ?? [];
+  await persistInningsState(
+    refreshed.innings.find((i) => i.id === target.id)!,
+    refreshed.players,
+    realDels,
+    m.max_balls_per_over ?? 0,
+  );
 }
 
 /** Public helpers — server-only */

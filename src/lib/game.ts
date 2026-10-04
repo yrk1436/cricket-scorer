@@ -13,6 +13,8 @@ export type SimState = {
   strikerId: string;
   nonStrikerId: string;
   dismissedIds: Set<string>;
+  /** Batters who retired hurt and have not yet returned to the crease. */
+  retiredHurtIds: Set<string>;
 };
 
 export type ReplayStrikeSeed = {
@@ -22,6 +24,9 @@ export type ReplayStrikeSeed = {
 
 /** Delivery note for mid-innings crease correction (no ball, no wicket). */
 export const CREASE_REPLACE_NOTE = "crease_replace";
+
+/** Delivery note for retiring a batter hurt (no ball, no wicket). */
+export const RETIRE_HURT_NOTE = "retire_hurt";
 
 /** Runs scored from one delivery row (excluding wicket meta). */
 export function totalRunsOnDelivery(d: DbDelivery): number {
@@ -249,6 +254,7 @@ export function replayInnings(
   if (!strikerId) return null;
 
   const dismissedIds = new Set<string>();
+  const retiredHurtIds = new Set<string>();
 
   let runs = 0;
   let wickets = 0;
@@ -280,6 +286,30 @@ export function replayInnings(
       continue;
     }
 
+    if (d.note === RETIRE_HURT_NOTE) {
+      const outId = d.dismissed_batsman_id ?? strikerId;
+      const next = d.incoming_striker_id;
+      retiredHurtIds.add(outId);
+      if (next) {
+        retiredHurtIds.delete(next);
+        if (outId === nonStrikerId) {
+          nonStrikerId = next;
+        } else {
+          strikerId = next;
+        }
+        if (strikerId === nonStrikerId) {
+          const pick = lineup.find(
+            (p) =>
+              !dismissedIds.has(p.id) &&
+              !retiredHurtIds.has(p.id) &&
+              p.id !== strikerId,
+          );
+          if (pick) nonStrikerId = pick.id;
+        }
+      }
+      continue;
+    }
+
     runs += totalRunsOnDelivery(d);
 
     if (d.counts_as_legal_delivery) ballsLegal += 1;
@@ -297,6 +327,8 @@ export function replayInnings(
       // Retired not out — batter may bat again later in the innings.
       if (d.dismissal !== "retired_hurt") {
         dismissedIds.add(outId);
+      } else {
+        retiredHurtIds.add(outId);
       }
 
       let next: string | null = null;
@@ -311,6 +343,7 @@ export function replayInnings(
         lineup.some((p) => p.id === inc)
       ) {
         next = inc;
+        retiredHurtIds.delete(inc);
       }
       if (next == null) {
         const vacatedEnd =
@@ -357,6 +390,7 @@ export function replayInnings(
     strikerId,
     nonStrikerId,
     dismissedIds,
+    retiredHurtIds,
   };
 }
 
@@ -414,12 +448,28 @@ export function batterStats(
   let strikerId = sorted[0].striker_id ?? "";
   let nonStrikerId = sorted[0].non_striker_id ?? strikerId;
   const dismissedIds = new Set<string>();
+  const retiredHurtIds = new Set<string>();
   const stats = new Map<string, BatterStat>();
 
   for (let i = 0; i < sorted.length; i++) {
     const d = sorted[i];
     if (d.is_strike_swap) {
       [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
+      continue;
+    }
+
+    if (d.note === RETIRE_HURT_NOTE) {
+      const outId = d.dismissed_batsman_id ?? strikerId;
+      const next = d.incoming_striker_id;
+      retiredHurtIds.add(outId);
+      if (next) {
+        retiredHurtIds.delete(next);
+        if (outId === nonStrikerId) {
+          nonStrikerId = next;
+        } else {
+          strikerId = next;
+        }
+      }
       continue;
     }
 
@@ -439,7 +489,11 @@ export function batterStats(
       d.dismissed_batsman_id ?? d.striker_id ?? strikerId;
 
     if (d.is_wicket) {
-      if (d.dismissal !== "retired_hurt") dismissedIds.add(outId);
+      if (d.dismissal !== "retired_hurt") {
+        dismissedIds.add(outId);
+      } else {
+        retiredHurtIds.add(outId);
+      }
 
       let next: string | null = null;
       const inc = d.incoming_striker_id;
@@ -452,6 +506,7 @@ export function batterStats(
         lineup.some((p) => p.id === inc)
       ) {
         next = inc;
+        retiredHurtIds.delete(inc);
       }
       if (next == null) {
         const vacatedEnd =
