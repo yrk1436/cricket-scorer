@@ -226,7 +226,19 @@ export default function CreateMatchForm({ origin }: { origin: string }) {
           />
         </div>
 
-        {err && <div className="error-banner">{err}</div>}
+        {err && (
+          <div className="error-banner">
+            {err}
+            {(err.toLowerCase().includes("database") ||
+              err.toLowerCase().includes("unavailable") ||
+              err.toLowerCase().includes("fetch failed")) && (
+              <p style={{ marginTop: 8, fontSize: "0.85em", opacity: 0.9 }}>
+                The database may be temporarily unavailable. Please try again
+                in a few minutes.
+              </p>
+            )}
+          </div>
+        )}
 
         <button
           type="submit"
