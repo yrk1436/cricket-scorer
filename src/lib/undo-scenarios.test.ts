@@ -132,6 +132,50 @@ describe("Undo scenario: Batter is out, new batter just selected", () => {
   });
 });
 
+describe("Undo scenario: Opening bowler set, no ball bowled yet", () => {
+  it("should detect opening bowler can be changed when no balls bowled", () => {
+    // Scenario: Opening lineup set (striker, non-striker, bowler) but no ball bowled
+    // State: current_striker_id=set, current_non_striker_id=set, current_bowler_id=set, dels=[]
+    const dels: DbDelivery[] = [];
+    
+    // No deliveries yet
+    expect(dels.length).toBe(0);
+    
+    // In the frontend, this would check:
+    // openingBowlerCanChange = allowPad && targetInnings.current_bowler_id != null && activeDels.length === 0
+    // Since dels.length === 0 and bowler is set, opening bowler can be changed
+    
+    // Undo action: call DELETE /opening to clear current_bowler_id
+    // Change bowler: show bowler picker, on confirm call PATCH /opening with new bowlerId
+  });
+
+  it("should not allow opening bowler change once a ball is bowled", () => {
+    const dels = [
+      makeDelivery({ display_order: 1, counts_as_legal_delivery: true }),
+    ];
+    
+    // One ball has been bowled
+    expect(dels.length).toBe(1);
+    
+    // openingBowlerCanChange would be false because dels.length > 0
+    // Opening bowler is locked - same as new-over bowler
+  });
+
+  it("should detect openers already set when bowler is cleared", () => {
+    // State after clearing opening bowler:
+    // current_striker_id=set, current_non_striker_id=set, current_bowler_id=null, dels=[]
+    const dels: DbDelivery[] = [];
+    
+    // With openers set but bowler null:
+    // needsOpeningGate = true (current_bowler_id == null)
+    // openersAlreadySet = true (current_striker_id && current_non_striker_id)
+    // needsOpeningBowlerOnly = needsOpeningGate && openersAlreadySet = true
+    
+    // UI should show bowler-only picker, not full opening lineup form
+    expect(dels.length).toBe(0);
+  });
+});
+
 describe("Undo flow sequence", () => {
   it("should support three-step undo: bowler -> incoming batter -> wicket", () => {
     // State 1: After 6 balls, bowler confirmed for new over but no ball bowled

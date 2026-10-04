@@ -317,6 +317,101 @@ export async function setOpeningLineup(
   );
 }
 
+/**
+ * Clear the opening bowler from the innings (for undo before first ball).
+ * Openers are kept; only the bowler is cleared.
+ */
+export async function clearOpeningBowler(
+  writeToken: string,
+  unlockCookie?: string,
+) {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status === "completed" && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  const bundle = await fetchBundle(m);
+  const inn =
+    m.status === "completed"
+      ? lastInningsByIndex(bundle)
+      : await getActiveInnings(m, bundle.innings);
+
+  if (!inn) throw new Error("No innings");
+
+  const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
+  if (dels.length > 0) {
+    throw new Error("Cannot clear opening bowler after balls have been bowled");
+  }
+
+  if (!inn.current_bowler_id) {
+    throw new Error("No opening bowler to clear");
+  }
+
+  const { error } = await sb()
+    .from("innings")
+    .update({ current_bowler_id: null })
+    .eq("id", inn.id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Set just the opening bowler (for changing bowler before first ball when openers are already set).
+ */
+export async function setOpeningBowler(
+  writeToken: string,
+  bowlerId: string,
+  unlockCookie?: string,
+) {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status === "completed" && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  const bundle = await fetchBundle(m);
+  const inn =
+    m.status === "completed"
+      ? lastInningsByIndex(bundle)
+      : await getActiveInnings(m, bundle.innings);
+
+  if (!inn) throw new Error("No innings");
+
+  const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
+  if (dels.length > 0) {
+    throw new Error("Cannot change opening bowler after balls have been bowled");
+  }
+
+  if (!inn.current_striker_id || !inn.current_non_striker_id) {
+    throw new Error("Openers must be set before setting the bowler");
+  }
+
+  const bowl = opposite(inn.batting_side as TeamSide);
+  const b = bundle.players.find((p) => p.id === bowlerId);
+  if (!b || b.side !== bowl) {
+    throw new Error("Bowler must be on the bowling team");
+  }
+
+  const { error } = await sb()
+    .from("innings")
+    .update({ current_bowler_id: bowlerId })
+    .eq("id", inn.id);
+
+  if (error) throw new Error(error.message);
+
+  const refreshed = await fetchBundle(m);
+  const realDels = refreshed.deliveriesByInningsId[inn.id] ?? [];
+  await persistInningsState(
+    refreshed.innings.find((x) => x.id === inn.id)!,
+    refreshed.players,
+    realDels,
+    m.max_balls_per_over ?? 0,
+  );
+}
+
 export async function updateMatchSettings(
   writeToken: string,
   patch: UpdateMatchSettingsInput,

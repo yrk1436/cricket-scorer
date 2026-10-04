@@ -80,6 +80,7 @@ export default function ScorerWorkbench({
     pickLeaving?: boolean;
   }>({ open: false, end: "striker" });
   const [bowlerHudOpen, setBowlerHudOpen] = useState(false);
+  const [bowlerHudMode, setBowlerHudMode] = useState<"new_over" | "opening">("new_over");
   const [openingHudOpen, setOpeningHudOpen] = useState(true);
   const prevNeedsBowlerRef = useRef(false);
 
@@ -209,6 +210,18 @@ export default function ScorerWorkbench({
   const needsOpeningGate =
     allowPad && !!targetInnings && targetInnings.current_bowler_id == null;
 
+  const openersAlreadySet =
+    !!targetInnings?.current_striker_id && !!targetInnings?.current_non_striker_id;
+
+  const needsOpeningBowlerOnly =
+    needsOpeningGate && openersAlreadySet;
+
+  const openingBowlerCanChange =
+    allowPad &&
+    !!targetInnings &&
+    targetInnings.current_bowler_id != null &&
+    activeDels.length === 0;
+
   const awaitingBowler = awaitingNewOverBowler(
     activeDels,
     ballsLegal,
@@ -224,17 +237,29 @@ export default function ScorerWorkbench({
   const mustPickNewOverBowler =
     allowPad && !!targetInnings && needsBowlerPick;
 
-  const openBowlerPicker = () => {
+  const openBowlerPicker = (mode: "new_over" | "opening" = "new_over") => {
     setErr(null);
+    setBowlerHudMode(mode);
     setBowlerHudOpen(true);
   };
 
   useEffect(() => {
-    if (needsOpeningGate) setOpeningHudOpen(true);
-  }, [needsOpeningGate]);
+    if (needsOpeningGate && !needsOpeningBowlerOnly) {
+      setOpeningHudOpen(true);
+    }
+  }, [needsOpeningGate, needsOpeningBowlerOnly]);
+
+  useEffect(() => {
+    if (needsOpeningBowlerOnly) {
+      setBowlerHudMode("opening");
+      setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
+      setBowlerHudOpen(true);
+    }
+  }, [needsOpeningBowlerOnly, ballsLegal]);
 
   useEffect(() => {
     if (needsBowlerPick && !prevNeedsBowlerRef.current) {
+      setBowlerHudMode("new_over");
       setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
       setBowlerHudOpen(true);
     }
@@ -380,11 +405,29 @@ export default function ScorerWorkbench({
     return bundle.players.find((p) => p.id === pendingIncomingBatter.dismissedBatterId)?.display_name ?? "—";
   }, [pendingIncomingBatter.dismissedBatterId, bundle.players]);
 
-  function confirmNewOverBowler() {
+  async function confirmBowlerSelection() {
     if (!overPick.bowlingId) {
       setErr("Pick a bowler for this over");
       return;
     }
+    
+    if (bowlerHudMode === "opening") {
+      const ok = await exec(async () => {
+        const r = await fetch(`${apiRoot}/opening`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bowlerId: overPick.bowlingId }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? "Failed to set opening bowler");
+      });
+      if (ok) {
+        setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
+        setBowlerHudOpen(false);
+      }
+      return;
+    }
+
     if (overPick.bowlingId === lastBd?.bowler_id) {
       setErr("Pick a different bowler — the previous over's bowler cannot continue");
       return;
@@ -395,15 +438,21 @@ export default function ScorerWorkbench({
   }
 
   function resetBowlerPick() {
+    if (openingBowlerCanChange) {
+      setBowlerHudMode("opening");
+    } else {
+      setBowlerHudMode("new_over");
+    }
     setOverPick((o) => ({ ...o, ready: false }));
     setBowlerHudOpen(true);
   }
 
   const canChangeBowler =
-    bowlerPickConfirmed &&
-    awaitingBowler &&
-    overProg.legalBalls === 0 &&
-    overProg.totalBalls === 0;
+    openingBowlerCanChange ||
+    (bowlerPickConfirmed &&
+      awaitingBowler &&
+      overProg.legalBalls === 0 &&
+      overProg.totalBalls === 0);
 
   const statusBadge =
     match.status === "live" ? "live" : match.status === "completed" ? "done" : "";
@@ -468,8 +517,8 @@ export default function ScorerWorkbench({
       </HudModal>
 
       <HudModal
-        open={needsBowlerPick && bowlerHudOpen}
-        title="New over — choose bowler"
+        open={(needsBowlerPick || needsOpeningBowlerOnly || (openingBowlerCanChange && bowlerHudOpen)) && bowlerHudOpen}
+        title={bowlerHudMode === "opening" ? "Choose opening bowler" : "New over — choose bowler"}
         onBackdropClick={() => setBowlerHudOpen(false)}
       >
         {err ? (
@@ -478,24 +527,25 @@ export default function ScorerWorkbench({
           </div>
         ) : null}
         <p className="mb-3 text-sm opacity-90">
-          Six legal balls finished. Pick who bowls this over — not the same
-          bowler as the last over.
+          {bowlerHudMode === "opening"
+            ? "Select the bowler for the first ball of the innings."
+            : "Six legal balls finished. Pick who bowls this over — not the same bowler as the last over."}
         </p>
-        {bowlersForNewOver.length === 0 ? (
+        {(bowlerHudMode === "opening" ? bowlers : bowlersForNewOver).length === 0 ? (
           <p className="text-sm" style={{ color: "#fde68a" }}>
-            No other bowlers on the squad list. Mark players as not DNB or add
+            No bowlers on the squad list. Mark players as not DNB or add
             more bowlers.
           </p>
         ) : (
           <>
             <PickerField
-              label="Bowler this over"
+              label={bowlerHudMode === "opening" ? "Opening bowler" : "Bowler this over"}
               value={overPick.bowlingId}
               onChange={(id) => {
                 setOverPick((o) => ({ ...o, bowlingId: id }));
                 setErr(null);
               }}
-              options={bowlersForNewOver.map((p) => ({
+              options={(bowlerHudMode === "opening" ? bowlers : bowlersForNewOver).map((p) => ({
                 id: p.id,
                 label: p.display_name,
               }))}
@@ -518,7 +568,7 @@ export default function ScorerWorkbench({
                 type="button"
                 disabled={busy || !overPick.bowlingId}
                 className="hud-btn primary flex-1 disabled:opacity-50"
-                onClick={() => confirmNewOverBowler()}
+                onClick={() => void confirmBowlerSelection()}
               >
                 Continue scoring
               </button>
@@ -730,6 +780,15 @@ export default function ScorerWorkbench({
           type="button"
           disabled={busy || !allowPad}
           onClick={async () => {
+            if (openingBowlerCanChange) {
+              await exec(async () => {
+                const r = await fetch(`${apiRoot}/opening`, { method: "DELETE" });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error ?? "Undo failed");
+              });
+              return;
+            }
+
             if (canChangeBowler) {
               resetBowlerPick();
               return;
