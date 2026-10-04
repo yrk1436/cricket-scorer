@@ -11,6 +11,7 @@ import ScoringPad from "@/components/scorer/ScoringPad";
 import CompletedMatchView from "@/components/CompletedMatchView";
 import ReplaceBatterHud from "@/components/ReplaceBatterHud";
 import WicketHud from "@/components/scorer/WicketHud";
+import IncomingBatterHud from "@/components/IncomingBatterHud";
 import { rememberMatch, touchRecentMatch } from "@/lib/recent-matches";
 import {
   awaitingNewOverBowler,
@@ -67,6 +68,11 @@ export default function ScorerWorkbench({
     bowlingId: "",
     ready: false,
   });
+  const [pendingIncomingBatter, setPendingIncomingBatter] = useState<{
+    open: boolean;
+    deliveryId: string | null;
+    dismissedBatterId: string | null;
+  }>({ open: false, deliveryId: null, dismissedBatterId: null });
   const [wicketHudOpen, setWicketHudOpen] = useState(false);
   const [replaceHud, setReplaceHud] = useState<{
     open: boolean;
@@ -358,6 +364,22 @@ export default function ScorerWorkbench({
     return batsmen.filter((p) => !sim.dismissedIds.has(p.id));
   }, [batsmen, sim]);
 
+  const incomingBatterCandidates = useMemo(() => {
+    if (!sim || !pendingIncomingBatter.dismissedBatterId) return [];
+    return batsmen.filter(
+      (p) =>
+        p.id !== sim.strikerId &&
+        p.id !== sim.nonStrikerId &&
+        p.id !== pendingIncomingBatter.dismissedBatterId &&
+        !sim.dismissedIds.has(p.id),
+    );
+  }, [batsmen, sim, pendingIncomingBatter.dismissedBatterId]);
+
+  const dismissedBatterName = useMemo(() => {
+    if (!pendingIncomingBatter.dismissedBatterId) return "";
+    return bundle.players.find((p) => p.id === pendingIncomingBatter.dismissedBatterId)?.display_name ?? "—";
+  }, [pendingIncomingBatter.dismissedBatterId, bundle.players]);
+
   function confirmNewOverBowler() {
     if (!overPick.bowlingId) {
       setErr("Pick a bowler for this over");
@@ -371,6 +393,17 @@ export default function ScorerWorkbench({
     setOverPick((o) => ({ ...o, ready: true, gateKey: ballsLegal }));
     setBowlerHudOpen(false);
   }
+
+  function resetBowlerPick() {
+    setOverPick((o) => ({ ...o, ready: false }));
+    setBowlerHudOpen(true);
+  }
+
+  const canChangeBowler =
+    bowlerPickConfirmed &&
+    awaitingBowler &&
+    overProg.legalBalls === 0 &&
+    overProg.totalBalls === 0;
 
   const statusBadge =
     match.status === "live" ? "live" : match.status === "completed" ? "done" : "";
@@ -563,6 +596,30 @@ export default function ScorerWorkbench({
         />
       )}
 
+      <IncomingBatterHud
+        open={pendingIncomingBatter.open}
+        busy={busy}
+        dismissedName={dismissedBatterName}
+        candidates={incomingBatterCandidates}
+        onClose={() => setPendingIncomingBatter({ open: false, deliveryId: null, dismissedBatterId: null })}
+        onConfirm={async (incomingPlayerId) => {
+          const ok = await exec(async () => {
+            const deliveryId = pendingIncomingBatter.deliveryId;
+            if (!deliveryId) throw new Error("No delivery to update");
+            const r = await fetch(`${apiRoot}/delivery/${deliveryId}/incoming`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ incomingStrikerId: incomingPlayerId }),
+            });
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error ?? "Failed to set incoming batter");
+          });
+          if (ok) {
+            setPendingIncomingBatter({ open: false, deliveryId: null, dismissedBatterId: null });
+          }
+        }}
+      />
+
       <header className="top-bar no-print">
         <div>
           <h1>Scoring</h1>
@@ -616,7 +673,9 @@ export default function ScorerWorkbench({
           bowlerName={pName(safeBowlerValue || null)}
           overStatus={overStatus}
           bowlerPickPending={needsBowlerPick}
+          canChangeBowler={canChangeBowler}
           onPickBowler={openBowlerPicker}
+          onChangeBowler={resetBowlerPick}
           onReplaceStriker={
             padUnlocked && allowPad && match.status === "live"
               ? () => setReplaceHud({ open: true, end: "striker" })
@@ -670,13 +729,42 @@ export default function ScorerWorkbench({
         <button
           type="button"
           disabled={busy || !allowPad}
-          onClick={() =>
-            exec(async () => {
+          onClick={async () => {
+            if (canChangeBowler) {
+              resetBowlerPick();
+              return;
+            }
+
+            const lastDel = activeDels.length > 0
+              ? activeDels.reduce((a, b) =>
+                  a.display_order > b.display_order ? a : b)
+              : null;
+            const isWicketWithIncoming = lastDel?.is_wicket && lastDel.incoming_striker_id;
+
+            if (isWicketWithIncoming) {
+              await exec(async () => {
+                const r = await fetch(`${apiRoot}/undo`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ mode: "clear_incoming_batter" }),
+                });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error ?? "Undo failed");
+              });
+              setPendingIncomingBatter({
+                open: true,
+                deliveryId: lastDel.id,
+                dismissedBatterId: lastDel.dismissed_batsman_id ?? null,
+              });
+              return;
+            }
+
+            await exec(async () => {
               const r = await fetch(`${apiRoot}/undo`, { method: "POST" });
               const j = await r.json();
               if (!r.ok) throw new Error(j.error ?? "Undo failed");
-            })
-          }
+            });
+          }}
         >
           Undo
         </button>
