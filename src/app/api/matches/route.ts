@@ -1,5 +1,25 @@
 import { ok, bad } from "@/lib/api-json";
 import { createMatch, type CreateMatchInput } from "@/lib/match-service";
+import { DatabaseConnectionError } from "@/lib/supabase/admin";
+
+function formatError(e: unknown): { message: string; status: number } {
+  if (e instanceof DatabaseConnectionError) {
+    return { message: e.message, status: 503 };
+  }
+  const raw = e instanceof Error ? e.message : String(e);
+  if (
+    raw.includes("fetch failed") ||
+    raw.includes("ENOTFOUND") ||
+    raw.includes("ECONNREFUSED")
+  ) {
+    return {
+      message:
+        "Database connection failed. The database may be temporarily unavailable. Please try again later.",
+      status: 503,
+    };
+  }
+  return { message: raw || "Create failed", status: 400 };
+}
 
 export async function POST(req: Request) {
   try {
@@ -26,7 +46,7 @@ export async function POST(req: Request) {
       matchId: r.match.id,
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Create failed";
-    return bad(msg, 400);
+    const { message, status } = formatError(e);
+    return bad(message, status);
   }
 }
