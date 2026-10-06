@@ -11,10 +11,12 @@ import ScoringPad from "@/components/scorer/ScoringPad";
 import CompletedMatchView from "@/components/CompletedMatchView";
 import ReplaceBatterHud from "@/components/ReplaceBatterHud";
 import WicketHud from "@/components/scorer/WicketHud";
+import IncomingBatterHud from "@/components/IncomingBatterHud";
 import { rememberMatch, touchRecentMatch } from "@/lib/recent-matches";
 import {
   awaitingNewOverBowler,
   batterStats,
+  bowlerAtEndOfPreviousOver,
   currentOverProgress,
   eligibleBatters,
   eligibleBowlers,
@@ -67,6 +69,11 @@ export default function ScorerWorkbench({
     bowlingId: "",
     ready: false,
   });
+  const [pendingIncomingBatter, setPendingIncomingBatter] = useState<{
+    open: boolean;
+    deliveryId: string | null;
+    dismissedBatterId: string | null;
+  }>({ open: false, deliveryId: null, dismissedBatterId: null });
   const [wicketHudOpen, setWicketHudOpen] = useState(false);
   const [replaceHud, setReplaceHud] = useState<{
     open: boolean;
@@ -74,8 +81,13 @@ export default function ScorerWorkbench({
     pickLeaving?: boolean;
   }>({ open: false, end: "striker" });
   const [bowlerHudOpen, setBowlerHudOpen] = useState(false);
+  const [bowlerHudMode, setBowlerHudMode] = useState<"new_over" | "opening" | "mid_over">("new_over");
   const [openingHudOpen, setOpeningHudOpen] = useState(true);
   const prevNeedsBowlerRef = useRef(false);
+  const [lastBowlerChange, setLastBowlerChange] = useState<{
+    previousBowlerId: string | null;
+    timestamp: number;
+  } | null>(null);
 
   const { match } = bundle;
   const sideName = (side: "a" | "b") =>
@@ -203,6 +215,18 @@ export default function ScorerWorkbench({
   const needsOpeningGate =
     allowPad && !!targetInnings && targetInnings.current_bowler_id == null;
 
+  const openersAlreadySet =
+    !!targetInnings?.current_striker_id && !!targetInnings?.current_non_striker_id;
+
+  const needsOpeningBowlerOnly =
+    needsOpeningGate && openersAlreadySet;
+
+  const openingBowlerCanChange =
+    allowPad &&
+    !!targetInnings &&
+    targetInnings.current_bowler_id != null &&
+    activeDels.length === 0;
+
   const awaitingBowler = awaitingNewOverBowler(
     activeDels,
     ballsLegal,
@@ -218,17 +242,29 @@ export default function ScorerWorkbench({
   const mustPickNewOverBowler =
     allowPad && !!targetInnings && needsBowlerPick;
 
-  const openBowlerPicker = () => {
+  const openBowlerPicker = (mode: "new_over" | "opening" = "new_over") => {
     setErr(null);
+    setBowlerHudMode(mode);
     setBowlerHudOpen(true);
   };
 
   useEffect(() => {
-    if (needsOpeningGate) setOpeningHudOpen(true);
-  }, [needsOpeningGate]);
+    if (needsOpeningGate && !needsOpeningBowlerOnly) {
+      setOpeningHudOpen(true);
+    }
+  }, [needsOpeningGate, needsOpeningBowlerOnly]);
+
+  useEffect(() => {
+    if (needsOpeningBowlerOnly) {
+      setBowlerHudMode("opening");
+      setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
+      setBowlerHudOpen(true);
+    }
+  }, [needsOpeningBowlerOnly, ballsLegal]);
 
   useEffect(() => {
     if (needsBowlerPick && !prevNeedsBowlerRef.current) {
+      setBowlerHudMode("new_over");
       setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
       setBowlerHudOpen(true);
     }
@@ -358,19 +394,110 @@ export default function ScorerWorkbench({
     return batsmen.filter((p) => !sim.dismissedIds.has(p.id));
   }, [batsmen, sim]);
 
-  function confirmNewOverBowler() {
+  const incomingBatterCandidates = useMemo(() => {
+    if (!sim || !pendingIncomingBatter.dismissedBatterId) return [];
+    return batsmen.filter(
+      (p) =>
+        p.id !== sim.strikerId &&
+        p.id !== sim.nonStrikerId &&
+        p.id !== pendingIncomingBatter.dismissedBatterId &&
+        !sim.dismissedIds.has(p.id),
+    );
+  }, [batsmen, sim, pendingIncomingBatter.dismissedBatterId]);
+
+  const dismissedBatterName = useMemo(() => {
+    if (!pendingIncomingBatter.dismissedBatterId) return "";
+    return bundle.players.find((p) => p.id === pendingIncomingBatter.dismissedBatterId)?.display_name ?? "—";
+  }, [pendingIncomingBatter.dismissedBatterId, bundle.players]);
+
+  async function confirmBowlerSelection() {
     if (!overPick.bowlingId) {
       setErr("Pick a bowler for this over");
       return;
     }
-    if (overPick.bowlingId === lastBd?.bowler_id) {
+    
+    if (bowlerHudMode === "opening") {
+      const ok = await exec(async () => {
+        const r = await fetch(`${apiRoot}/opening`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bowlerId: overPick.bowlingId }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? "Failed to set opening bowler");
+      });
+      if (ok) {
+        setLastBowlerChange({
+          previousBowlerId: targetInnings?.current_bowler_id ?? null,
+          timestamp: Date.now(),
+        });
+        setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
+        setBowlerHudOpen(false);
+      }
+      return;
+    }
+
+    if (bowlerHudMode === "mid_over") {
+      const prevOverBowlerId = bowlerAtEndOfPreviousOver(activeDels);
+      if (prevOverBowlerId && overPick.bowlingId === prevOverBowlerId) {
+        setErr("Cannot pick the same bowler as the previous over");
+        return;
+      }
+
+      const ok = await exec(async () => {
+        const r = await fetch(`${apiRoot}/bowler`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bowlerId: overPick.bowlingId }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? "Failed to change bowler");
+        setLastBowlerChange({
+          previousBowlerId: j.previousBowlerId ?? null,
+          timestamp: Date.now(),
+        });
+      });
+      if (ok) {
+        setOverPick({ gateKey: ballsLegal, bowlingId: "", ready: false });
+        setBowlerHudOpen(false);
+      }
+      return;
+    }
+
+    const prevOverBowlerId = bowlerAtEndOfPreviousOver(activeDels);
+    if (prevOverBowlerId && overPick.bowlingId === prevOverBowlerId) {
       setErr("Pick a different bowler — the previous over's bowler cannot continue");
       return;
     }
     setErr(null);
+    setLastBowlerChange({
+      previousBowlerId: targetInnings?.current_bowler_id ?? null,
+      timestamp: Date.now(),
+    });
     setOverPick((o) => ({ ...o, ready: true, gateKey: ballsLegal }));
     setBowlerHudOpen(false);
   }
+
+  function openBowlerChangeModal() {
+    if (openingBowlerCanChange) {
+      setBowlerHudMode("opening");
+    } else if (awaitingBowler && overProg.totalBalls === 0) {
+      setBowlerHudMode("new_over");
+    } else {
+      setBowlerHudMode("mid_over");
+    }
+    setOverPick((o) => ({ ...o, ready: false, bowlingId: "" }));
+    setBowlerHudOpen(true);
+  }
+
+  const bowlerEditable =
+    allowPad &&
+    !!targetInnings &&
+    match.status === "live" &&
+    (openingBowlerCanChange ||
+      (awaitingBowler && overProg.totalBalls === 0 && bowlerPickConfirmed) ||
+      (!awaitingBowler && overProg.totalBalls > 0) ||
+      (!awaitingBowler && overProg.legalBalls > 0));
 
   const statusBadge =
     match.status === "live" ? "live" : match.status === "completed" ? "done" : "";
@@ -435,8 +562,14 @@ export default function ScorerWorkbench({
       </HudModal>
 
       <HudModal
-        open={needsBowlerPick && bowlerHudOpen}
-        title="New over — choose bowler"
+        open={bowlerHudOpen}
+        title={
+          bowlerHudMode === "opening"
+            ? "Choose opening bowler"
+            : bowlerHudMode === "mid_over"
+              ? "Change bowler"
+              : "New over — choose bowler"
+        }
         onBackdropClick={() => setBowlerHudOpen(false)}
       >
         {err ? (
@@ -445,24 +578,29 @@ export default function ScorerWorkbench({
           </div>
         ) : null}
         <p className="mb-3 text-sm opacity-90">
-          Six legal balls finished. Pick who bowls this over — not the same
-          bowler as the last over.
+          {bowlerHudMode === "opening"
+            ? "Select the bowler for the first ball of the innings."
+            : bowlerHudMode === "mid_over"
+              ? overProg.totalBalls > 0
+                ? `Change who bowls this over. The ${overProg.totalBalls} ball${overProg.totalBalls > 1 ? "s" : ""} already bowled will be reassigned to the new bowler.`
+                : "Select a different bowler for this over."
+              : "Six legal balls finished. Pick who bowls this over — not the same bowler as the last over."}
         </p>
-        {bowlersForNewOver.length === 0 ? (
+        {(bowlerHudMode === "opening" ? bowlers : bowlersForNewOver).length === 0 ? (
           <p className="text-sm" style={{ color: "#fde68a" }}>
-            No other bowlers on the squad list. Mark players as not DNB or add
+            No bowlers on the squad list. Mark players as not DNB or add
             more bowlers.
           </p>
         ) : (
           <>
             <PickerField
-              label="Bowler this over"
+              label={bowlerHudMode === "opening" ? "Opening bowler" : "Bowler this over"}
               value={overPick.bowlingId}
               onChange={(id) => {
                 setOverPick((o) => ({ ...o, bowlingId: id }));
                 setErr(null);
               }}
-              options={bowlersForNewOver.map((p) => ({
+              options={(bowlerHudMode === "opening" ? bowlers : bowlersForNewOver).map((p) => ({
                 id: p.id,
                 label: p.display_name,
               }))}
@@ -485,9 +623,11 @@ export default function ScorerWorkbench({
                 type="button"
                 disabled={busy || !overPick.bowlingId}
                 className="hud-btn primary flex-1 disabled:opacity-50"
-                onClick={() => confirmNewOverBowler()}
+                onClick={() => void confirmBowlerSelection()}
               >
-                Continue scoring
+                {bowlerHudMode === "mid_over" && overProg.totalBalls > 0
+                  ? "Change & reassign"
+                  : "Continue scoring"}
               </button>
             </div>
           </>
@@ -563,6 +703,30 @@ export default function ScorerWorkbench({
         />
       )}
 
+      <IncomingBatterHud
+        open={pendingIncomingBatter.open}
+        busy={busy}
+        dismissedName={dismissedBatterName}
+        candidates={incomingBatterCandidates}
+        onClose={() => setPendingIncomingBatter({ open: false, deliveryId: null, dismissedBatterId: null })}
+        onConfirm={async (incomingPlayerId) => {
+          const ok = await exec(async () => {
+            const deliveryId = pendingIncomingBatter.deliveryId;
+            if (!deliveryId) throw new Error("No delivery to update");
+            const r = await fetch(`${apiRoot}/delivery/${deliveryId}/incoming`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ incomingStrikerId: incomingPlayerId }),
+            });
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error ?? "Failed to set incoming batter");
+          });
+          if (ok) {
+            setPendingIncomingBatter({ open: false, deliveryId: null, dismissedBatterId: null });
+          }
+        }}
+      />
+
       <header className="top-bar no-print">
         <div>
           <h1>Scoring</h1>
@@ -616,7 +780,9 @@ export default function ScorerWorkbench({
           bowlerName={pName(safeBowlerValue || null)}
           overStatus={overStatus}
           bowlerPickPending={needsBowlerPick}
+          bowlerEditable={bowlerEditable}
           onPickBowler={openBowlerPicker}
+          onBowlerNameClick={openBowlerChangeModal}
           onReplaceStriker={
             padUnlocked && allowPad && match.status === "live"
               ? () => setReplaceHud({ open: true, end: "striker" })
@@ -670,13 +836,79 @@ export default function ScorerWorkbench({
         <button
           type="button"
           disabled={busy || !allowPad}
-          onClick={() =>
-            exec(async () => {
+          onClick={async () => {
+            const lastDel = activeDels.length > 0
+              ? activeDels.reduce((a, b) =>
+                  a.display_order > b.display_order ? a : b)
+              : null;
+
+            const recentBowlerChange =
+              lastBowlerChange &&
+              Date.now() - lastBowlerChange.timestamp < 60000 &&
+              lastBowlerChange.previousBowlerId;
+
+            if (recentBowlerChange && lastBowlerChange.previousBowlerId) {
+              const ok = await exec(async () => {
+                const r = await fetch(`${apiRoot}/bowler`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ bowlerId: lastBowlerChange.previousBowlerId }),
+                });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error ?? "Undo failed");
+              });
+              if (ok) {
+                setLastBowlerChange(null);
+              }
+              return;
+            }
+
+            if (openingBowlerCanChange) {
+              await exec(async () => {
+                const r = await fetch(`${apiRoot}/opening`, { method: "DELETE" });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error ?? "Undo failed");
+              });
+              setLastBowlerChange(null);
+              return;
+            }
+
+            if (awaitingBowler && overProg.totalBalls === 0 && overPick.ready) {
+              setOverPick((o) => ({ ...o, ready: false }));
+              setBowlerHudOpen(true);
+              setBowlerHudMode("new_over");
+              setLastBowlerChange(null);
+              return;
+            }
+
+            const isWicketWithIncoming = lastDel?.is_wicket && lastDel.incoming_striker_id;
+
+            if (isWicketWithIncoming) {
+              await exec(async () => {
+                const r = await fetch(`${apiRoot}/undo`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ mode: "clear_incoming_batter" }),
+                });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error ?? "Undo failed");
+              });
+              setPendingIncomingBatter({
+                open: true,
+                deliveryId: lastDel.id,
+                dismissedBatterId: lastDel.dismissed_batsman_id ?? null,
+              });
+              setLastBowlerChange(null);
+              return;
+            }
+
+            await exec(async () => {
               const r = await fetch(`${apiRoot}/undo`, { method: "POST" });
               const j = await r.json();
               if (!r.ok) throw new Error(j.error ?? "Undo failed");
-            })
-          }
+            });
+            setLastBowlerChange(null);
+          }}
         >
           Undo
         </button>

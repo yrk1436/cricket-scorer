@@ -10,7 +10,9 @@ type Props = {
   bowlerName: string;
   overStatus: string;
   bowlerPickPending?: boolean;
+  bowlerEditable?: boolean;
   onPickBowler?: () => void;
+  onBowlerNameClick?: () => void;
   onReplaceStriker?: () => void;
   onReplaceNonStriker?: () => void;
   disabled?: boolean;
@@ -32,7 +34,9 @@ export default function CreaseBar({
   bowlerName,
   overStatus,
   bowlerPickPending,
+  bowlerEditable,
   onPickBowler,
+  onBowlerNameClick,
   onReplaceStriker,
   onReplaceNonStriker,
   disabled,
@@ -94,6 +98,17 @@ export default function CreaseBar({
           Bowler:{" "}
           {bowlerPickPending ? (
             <span className="bowler-unset">not set</span>
+          ) : bowlerEditable && onBowlerNameClick ? (
+            <button
+              type="button"
+              className="bowler-name-btn"
+              onClick={onBowlerNameClick}
+              disabled={disabled}
+              title="Change bowler"
+            >
+              {bowlerName}
+              <span className="bowler-edit-icon" aria-hidden>✎</span>
+            </button>
           ) : (
             <b>{bowlerName}</b>
           )}
