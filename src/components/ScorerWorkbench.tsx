@@ -2,6 +2,7 @@
 
 import BallOrbits from "@/components/BallOrbits";
 import HudModal from "@/components/HudModal";
+import LiveScorecardSheet from "@/components/LiveScorecardSheet";
 import Scorecard from "@/components/Scorecard";
 import CreaseBar from "@/components/scorer/CreaseBar";
 import ExtrasHud from "@/components/scorer/ExtrasHud";
@@ -75,6 +76,7 @@ export default function ScorerWorkbench({
   }>({ open: false, end: "striker" });
   const [bowlerHudOpen, setBowlerHudOpen] = useState(false);
   const [openingHudOpen, setOpeningHudOpen] = useState(true);
+  const [scorecardSheetOpen, setScorecardSheetOpen] = useState(false);
   const prevNeedsBowlerRef = useRef(false);
 
   const { match } = bundle;
@@ -563,6 +565,15 @@ export default function ScorerWorkbench({
         />
       )}
 
+      <LiveScorecardSheet
+        open={scorecardSheetOpen}
+        onClose={() => setScorecardSheetOpen(false)}
+        match={match}
+        players={bundle.players}
+        innings={bundle.innings}
+        deliveriesByInningsId={bundle.deliveriesByInningsId}
+      />
+
       <header className="top-bar no-print">
         <div>
           <h1>Scoring</h1>
@@ -679,6 +690,12 @@ export default function ScorerWorkbench({
           }
         >
           Undo
+        </button>
+        <button
+          type="button"
+          onClick={() => setScorecardSheetOpen(true)}
+        >
+          Scorecard
         </button>
         {match.status === "completed" && allowPad && (
           <button
