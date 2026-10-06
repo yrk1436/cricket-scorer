@@ -736,9 +736,6 @@ export default function ScorerWorkbench({
             Complete match
           </button>
         )}
-        <Link href={`/m/${match.public_id}`} className="primary" target="_blank">
-          Share read-only ↗
-        </Link>
       </div>
 
       {allowPad && sim && (
@@ -784,12 +781,14 @@ export default function ScorerWorkbench({
               ))}
             </ul>
           )}
-          <p className="mt-3 text-xs opacity-60">
-            Read-only link:{" "}
-            <Link className="underline" href={readOnlyHref}>
-              {readOnlyHref}
-            </Link>
-          </p>
+          {match.status === "completed" && (
+            <p className="mt-3 text-xs opacity-60">
+              Read-only link:{" "}
+              <Link className="underline" href={readOnlyHref}>
+                {readOnlyHref}
+              </Link>
+            </p>
+          )}
         </div>
       </details>
 
