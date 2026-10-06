@@ -10,9 +10,9 @@ type Props = {
   bowlerName: string;
   overStatus: string;
   bowlerPickPending?: boolean;
-  canChangeBowler?: boolean;
+  bowlerEditable?: boolean;
   onPickBowler?: () => void;
-  onChangeBowler?: () => void;
+  onBowlerNameClick?: () => void;
   onReplaceStriker?: () => void;
   onReplaceNonStriker?: () => void;
   disabled?: boolean;
@@ -34,9 +34,9 @@ export default function CreaseBar({
   bowlerName,
   overStatus,
   bowlerPickPending,
-  canChangeBowler,
+  bowlerEditable,
   onPickBowler,
-  onChangeBowler,
+  onBowlerNameClick,
   onReplaceStriker,
   onReplaceNonStriker,
   disabled,
@@ -98,6 +98,17 @@ export default function CreaseBar({
           Bowler:{" "}
           {bowlerPickPending ? (
             <span className="bowler-unset">not set</span>
+          ) : bowlerEditable && onBowlerNameClick ? (
+            <button
+              type="button"
+              className="bowler-name-btn"
+              onClick={onBowlerNameClick}
+              disabled={disabled}
+              title="Change bowler"
+            >
+              {bowlerName}
+              <span className="bowler-edit-icon" aria-hidden>✎</span>
+            </button>
           ) : (
             <b>{bowlerName}</b>
           )}
@@ -105,15 +116,6 @@ export default function CreaseBar({
         {bowlerPickPending && onPickBowler ? (
           <button type="button" className="bowler-pick-btn" onClick={onPickBowler}>
             Choose bowler
-          </button>
-        ) : canChangeBowler && onChangeBowler ? (
-          <button
-            type="button"
-            className="bowler-pick-btn"
-            onClick={onChangeBowler}
-            disabled={disabled}
-          >
-            Change bowler
           </button>
         ) : (
           <span style={{ fontFamily: "var(--mono)" }}>{overStatus}</span>

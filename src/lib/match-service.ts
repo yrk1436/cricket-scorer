@@ -2,7 +2,9 @@ import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   awaitingNewOverBowler,
   CREASE_REPLACE_NOTE,
+  currentOverDeliveries,
   currentOverProgress,
+  bowlerAtEndOfPreviousOver,
   firstBattingSide,
   chaseTargetReached,
   lastBowlingDelivery,
@@ -410,6 +412,155 @@ export async function setOpeningBowler(
     realDels,
     m.max_balls_per_over ?? 0,
   );
+}
+
+/** Note type for bowler change records (used for undo). */
+export const BOWLER_CHANGE_NOTE = "bowler_change";
+
+/**
+ * Change the bowler for the current over.
+ * If balls have been bowled in this over, all of them are reassigned to the new bowler.
+ * Returns info about the previous bowler for undo support.
+ */
+export async function changeBowler(
+  writeToken: string,
+  newBowlerId: string,
+  unlockCookie?: string,
+): Promise<{ previousBowlerId: string | null; deliveriesUpdated: number }> {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status === "completed" && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  const bundle = await fetchBundle(m);
+  const inn =
+    m.status === "completed"
+      ? lastInningsByIndex(bundle)
+      : await getActiveInnings(m, bundle.innings);
+
+  if (!inn) throw new Error("No innings");
+
+  const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
+  const bowlSide = opposite(inn.batting_side as TeamSide);
+
+  const newBowler = bundle.players.find((p) => p.id === newBowlerId);
+  if (!newBowler || newBowler.side !== bowlSide) {
+    throw new Error("Bowler must be on the bowling team");
+  }
+
+  const prevOverBowler = bowlerAtEndOfPreviousOver(dels);
+  if (prevOverBowler && newBowlerId === prevOverBowler) {
+    throw new Error("Cannot pick the same bowler as the previous over");
+  }
+
+  const currentOver = currentOverDeliveries(dels, m.max_balls_per_over ?? 0);
+  const previousBowlerId = currentOver.length > 0
+    ? currentOver[0].bowler_id
+    : inn.current_bowler_id;
+
+  if (currentOver.length === 0) {
+    const { error } = await sb()
+      .from("innings")
+      .update({ current_bowler_id: newBowlerId })
+      .eq("id", inn.id);
+    if (error) throw new Error(error.message);
+  } else {
+    const deliveryIds = currentOver.map((d) => d.id);
+    const { error } = await sb()
+      .from("deliveries")
+      .update({ bowler_id: newBowlerId })
+      .in("id", deliveryIds);
+    if (error) throw new Error(error.message);
+
+    const { error: innErr } = await sb()
+      .from("innings")
+      .update({ current_bowler_id: newBowlerId })
+      .eq("id", inn.id);
+    if (innErr) throw new Error(innErr.message);
+  }
+
+  const refreshed = await fetchBundle(m);
+  const realDels = refreshed.deliveriesByInningsId[inn.id] ?? [];
+  await persistInningsState(
+    refreshed.innings.find((x) => x.id === inn.id)!,
+    refreshed.players,
+    realDels,
+    m.max_balls_per_over ?? 0,
+  );
+
+  if (m.status === "completed") {
+    await recomputeAllInningsAndSummary(m.id);
+  }
+
+  return {
+    previousBowlerId,
+    deliveriesUpdated: currentOver.length,
+  };
+}
+
+/**
+ * Revert a bowler change - reassigns deliveries in current over back to the previous bowler.
+ */
+export async function revertBowlerChange(
+  writeToken: string,
+  previousBowlerId: string,
+  unlockCookie?: string,
+): Promise<{ deliveriesUpdated: number }> {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status === "completed" && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  const bundle = await fetchBundle(m);
+  const inn =
+    m.status === "completed"
+      ? lastInningsByIndex(bundle)
+      : await getActiveInnings(m, bundle.innings);
+
+  if (!inn) throw new Error("No innings");
+
+  const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
+  const currentOver = currentOverDeliveries(dels, m.max_balls_per_over ?? 0);
+
+  if (currentOver.length === 0) {
+    const { error } = await sb()
+      .from("innings")
+      .update({ current_bowler_id: previousBowlerId })
+      .eq("id", inn.id);
+    if (error) throw new Error(error.message);
+  } else {
+    const deliveryIds = currentOver.map((d) => d.id);
+    const { error } = await sb()
+      .from("deliveries")
+      .update({ bowler_id: previousBowlerId })
+      .in("id", deliveryIds);
+    if (error) throw new Error(error.message);
+
+    const { error: innErr } = await sb()
+      .from("innings")
+      .update({ current_bowler_id: previousBowlerId })
+      .eq("id", inn.id);
+    if (innErr) throw new Error(innErr.message);
+  }
+
+  const refreshed = await fetchBundle(m);
+  const realDels = refreshed.deliveriesByInningsId[inn.id] ?? [];
+  await persistInningsState(
+    refreshed.innings.find((x) => x.id === inn.id)!,
+    refreshed.players,
+    realDels,
+    m.max_balls_per_over ?? 0,
+  );
+
+  if (m.status === "completed") {
+    await recomputeAllInningsAndSummary(m.id);
+  }
+
+  return { deliveriesUpdated: currentOver.length };
 }
 
 export async function updateMatchSettings(

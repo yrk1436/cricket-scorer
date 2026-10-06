@@ -291,6 +291,45 @@
   font-weight: 600;
 }
 
+.cricket-app .bowler-name-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-weight: 600;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.cricket-app .bowler-name-btn:hover {
+  background: rgba(52, 211, 153, 0.15);
+}
+
+.cricket-app .bowler-name-btn:active {
+  background: rgba(52, 211, 153, 0.25);
+}
+
+.cricket-app .bowler-name-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.cricket-app .bowler-edit-icon {
+  font-size: 0.65rem;
+  opacity: 0.6;
+  color: var(--accent);
+}
+
+.cricket-app .bowler-name-btn:hover .bowler-edit-icon {
+  opacity: 1;
+}
+
 .cricket-app .bowler-unset {
   color: #fde68a;
   font-style: italic;

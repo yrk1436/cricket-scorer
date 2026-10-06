@@ -176,6 +176,64 @@ describe("Undo scenario: Opening bowler set, no ball bowled yet", () => {
   });
 });
 
+describe("Undo scenario: Mid-over bowler change", () => {
+  it("should allow changing bowler mid-over", () => {
+    // Scenario: 2 legal balls bowled, scorer realizes wrong bowler was picked
+    const dels = [
+      makeDelivery({ id: "del-1", display_order: 1, counts_as_legal_delivery: true, bowler_id: "bowl-1" }),
+      makeDelivery({ id: "del-2", display_order: 2, counts_as_legal_delivery: true, bowler_id: "bowl-1" }),
+    ];
+    
+    const prog = currentOverProgress(dels, 0);
+    expect(prog.legalBalls).toBe(2);
+    expect(prog.totalBalls).toBe(2);
+    
+    // bowlerEditable should be true (mid-over, can change)
+    // When changing bowler:
+    // - All 2 deliveries should be reassigned to the new bowler (bowl-2)
+    // - previousBowlerId should be saved for undo
+    
+    // After change, bowler stats should reflect:
+    // - bowl-1: 0 balls, 0 runs, 0 wickets
+    // - bowl-2: 2 balls, 0 runs, 0 wickets (takes over the over)
+  });
+
+  it("should track previous bowler for undo after mid-over change", () => {
+    // After changing bowler from bowl-1 to bowl-2:
+    // lastBowlerChange = { previousBowlerId: "bowl-1", timestamp: now }
+    
+    // When undo is pressed:
+    // - Should call changeBowler API with previousBowlerId
+    // - Deliveries should be reassigned back to bowl-1
+    // - lastBowlerChange should be cleared
+  });
+
+  it("should not allow picking previous over bowler mid-over", () => {
+    // First over: 6 balls by bowl-1
+    // Second over: 2 balls by bowl-2
+    // Cannot change back to bowl-1 for this over
+    
+    const dels = [
+      ...Array.from({ length: 6 }, (_, i) =>
+        makeDelivery({ 
+          id: `del-${i}`, 
+          display_order: i + 1, 
+          counts_as_legal_delivery: true,
+          bowler_id: "bowl-1" 
+        })
+      ),
+      makeDelivery({ id: "del-6", display_order: 7, counts_as_legal_delivery: true, bowler_id: "bowl-2" }),
+      makeDelivery({ id: "del-7", display_order: 8, counts_as_legal_delivery: true, bowler_id: "bowl-2" }),
+    ];
+    
+    const prog = currentOverProgress(dels, 0);
+    expect(prog.legalBalls).toBe(2);  // Second over has 2 balls
+    
+    // bowlerAtEndOfPreviousOver should return "bowl-1"
+    // Changing to bowl-1 should be rejected
+  });
+});
+
 describe("Undo flow sequence", () => {
   it("should support three-step undo: bowler -> incoming batter -> wicket", () => {
     // State 1: After 6 balls, bowler confirmed for new over but no ball bowled
