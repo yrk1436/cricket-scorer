@@ -2,6 +2,7 @@
 
 import Scorecard from "@/components/Scorecard";
 import type { SerialBundle } from "@/lib/scorecard-text";
+import Link from "next/link";
 import { useState } from "react";
 
 type Props = {
@@ -51,6 +52,12 @@ export default function CompletedMatchView({
         </div>
         <span className="badge done">Done</span>
       </header>
+
+      <div className="toolbar no-print">
+        <Link href={`/m/${bundle.match.public_id}`} className="primary" target="_blank">
+          Share read-only ↗
+        </Link>
+      </div>
 
       <Scorecard bundle={bundle} variant="public" />
 

@@ -2,6 +2,7 @@
 
 import BallOrbits from "@/components/BallOrbits";
 import HudModal from "@/components/HudModal";
+import LiveScorecardSheet from "@/components/LiveScorecardSheet";
 import Scorecard from "@/components/Scorecard";
 import CreaseBar from "@/components/scorer/CreaseBar";
 import ExtrasHud from "@/components/scorer/ExtrasHud";
@@ -83,6 +84,7 @@ export default function ScorerWorkbench({
   const [bowlerHudOpen, setBowlerHudOpen] = useState(false);
   const [bowlerHudMode, setBowlerHudMode] = useState<"new_over" | "opening" | "mid_over">("new_over");
   const [openingHudOpen, setOpeningHudOpen] = useState(true);
+  const [scorecardSheetOpen, setScorecardSheetOpen] = useState(false);
   const prevNeedsBowlerRef = useRef(false);
   const [lastBowlerChange, setLastBowlerChange] = useState<{
     previousBowlerId: string | null;
@@ -703,6 +705,15 @@ export default function ScorerWorkbench({
         />
       )}
 
+<LiveScorecardSheet
+        open={scorecardSheetOpen}
+        onClose={() => setScorecardSheetOpen(false)}
+        match={match}
+        players={bundle.players}
+        innings={bundle.innings}
+        deliveriesByInningsId={bundle.deliveriesByInningsId}
+      />
+
       <IncomingBatterHud
         open={pendingIncomingBatter.open}
         busy={busy}
@@ -912,6 +923,12 @@ export default function ScorerWorkbench({
         >
           Undo
         </button>
+        <button
+          type="button"
+          onClick={() => setScorecardSheetOpen(true)}
+        >
+          Scorecard
+        </button>
         {match.status === "completed" && allowPad && (
           <button
             type="button"
@@ -951,9 +968,6 @@ export default function ScorerWorkbench({
             Complete match
           </button>
         )}
-        <Link href={`/m/${match.public_id}`} className="primary" target="_blank">
-          Share read-only ↗
-        </Link>
       </div>
 
       {allowPad && sim && (
@@ -999,12 +1013,14 @@ export default function ScorerWorkbench({
               ))}
             </ul>
           )}
-          <p className="mt-3 text-xs opacity-60">
-            Read-only link:{" "}
-            <Link className="underline" href={readOnlyHref}>
-              {readOnlyHref}
-            </Link>
-          </p>
+          {match.status === "completed" && (
+            <p className="mt-3 text-xs opacity-60">
+              Read-only link:{" "}
+              <Link className="underline" href={readOnlyHref}>
+                {readOnlyHref}
+              </Link>
+            </p>
+          )}
         </div>
       </details>
 
