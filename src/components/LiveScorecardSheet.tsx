@@ -104,15 +104,17 @@ function LiveInningsCard({
           </thead>
           <tbody>
             {batted.map((b) => {
-              const isNotOut = !b.out && !b.didNotBat;
+              const isNotOut = !b.out && !b.didNotBat && !b.isRetired;
               const isOnCrease =
                 isCurrentInnings &&
                 !inn.completed &&
+                !b.isRetired &&
                 (b.playerId === currentStrikerId ||
                   b.playerId === currentNonStrikerId);
               const isStriker =
                 isCurrentInnings &&
                 !inn.completed &&
+                !b.isRetired &&
                 b.playerId === currentStrikerId;
 
               return (
