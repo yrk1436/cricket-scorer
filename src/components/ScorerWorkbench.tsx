@@ -316,21 +316,27 @@ export default function ScorerWorkbench({
   const postDelivery = (body: Record<string, unknown>) =>
     exec(async () => {
       const strikeSwap = Boolean(body.strikeSwap);
+      const isRetirement =
+        body.isWicket &&
+        (body.dismissal === "retired_out" || body.dismissal === "retired_hurt");
+
       const payload = strikeSwap
         ? { strikeSwap: true }
-        : (() => {
-            if (needsOpeningGate) {
-              throw new Error(
-                "Confirm opening striker, non-striker, and bowler first",
-              );
-            }
-            if (mustPickNewOverBowler) {
-              throw new Error("Choose the bowler for the new over first");
-            }
-            const bid = effectiveBowlerId;
-            if (!bid) throw new Error("No bowler set for this ball");
-            return { ...body, bowlerId: bid };
-          })();
+        : isRetirement
+          ? body
+          : (() => {
+              if (needsOpeningGate) {
+                throw new Error(
+                  "Confirm opening striker, non-striker, and bowler first",
+                );
+              }
+              if (mustPickNewOverBowler) {
+                throw new Error("Choose the bowler for the new over first");
+              }
+              const bid = effectiveBowlerId;
+              if (!bid) throw new Error("No bowler set for this ball");
+              return { ...body, bowlerId: bid };
+            })();
 
       const r = await fetch(`${apiRoot}/delivery`, {
         method: "POST",
