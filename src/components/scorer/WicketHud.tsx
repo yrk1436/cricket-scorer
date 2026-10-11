@@ -127,7 +127,7 @@ export default function WicketHud({
       extraNb: 0,
       extraByes: option.allowRuns ? extraByes : 0,
       extraLegByes: 0,
-      countsAsLegalDelivery: true,
+      countsAsLegalDelivery: !option.isNotABall,
       isWicket: true,
       dismissal,
       dismissedBatsmanId: outId,
