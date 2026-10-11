@@ -217,6 +217,52 @@ describe("replayInnings", () => {
     expect(sim).not.toBeNull();
     expect(sim!.dismissedIds.has("bat-1")).toBe(false);
   });
+
+  it("handles non-striker retired out - incoming batter takes non-striker end", () => {
+    const players = makePlayers();
+    const dels = [
+      makeDelivery({ display_order: 1, runs_off_bat: 2 }),
+      makeDelivery({
+        display_order: 2,
+        is_wicket: true,
+        dismissal: "retired_out",
+        dismissed_batsman_id: "bat-2",
+        incoming_striker_id: "bat-3",
+        counts_as_legal_delivery: false,
+        bowler_id: null,
+      }),
+    ];
+    const sim = replayInnings("a", players, dels, null, 0);
+    expect(sim).not.toBeNull();
+    expect(sim!.wickets).toBe(1);
+    expect(sim!.balls_legal).toBe(1);
+    expect(sim!.dismissedIds.has("bat-2")).toBe(true);
+    expect(sim!.strikerId).toBe("bat-1");
+    expect(sim!.nonStrikerId).toBe("bat-3");
+  });
+
+  it("handles non-striker retired not out - incoming batter takes non-striker end", () => {
+    const players = makePlayers();
+    const dels = [
+      makeDelivery({ display_order: 1, runs_off_bat: 2 }),
+      makeDelivery({
+        display_order: 2,
+        is_wicket: true,
+        dismissal: "retired_hurt",
+        dismissed_batsman_id: "bat-2",
+        incoming_striker_id: "bat-3",
+        counts_as_legal_delivery: false,
+        bowler_id: null,
+      }),
+    ];
+    const sim = replayInnings("a", players, dels, null, 0);
+    expect(sim).not.toBeNull();
+    expect(sim!.wickets).toBe(0);
+    expect(sim!.balls_legal).toBe(1);
+    expect(sim!.dismissedIds.has("bat-2")).toBe(false);
+    expect(sim!.strikerId).toBe("bat-1");
+    expect(sim!.nonStrikerId).toBe("bat-3");
+  });
 });
 
 describe("currentOverProgress with retirements", () => {
