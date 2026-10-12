@@ -65,6 +65,10 @@ export type DismissalOption = {
   allowRuns?: boolean;
   /** Does not count as a wicket (retired not out) */
   notOut?: boolean;
+  /** Not a ball — retirement is recorded between deliveries, not as a delivery itself */
+  isNotABall?: boolean;
+  /** Either striker or non-striker can be dismissed (retirements) */
+  allowEitherBatter?: boolean;
 };
 
 export const DISMISSAL_OPTIONS: DismissalOption[] = [
@@ -74,8 +78,8 @@ export const DISMISSAL_OPTIONS: DismissalOption[] = [
   { id: "stumped", label: "Stumped", needsFielder: true },
   { id: "run_out", label: "Run out", needsFielder: true, allowNonStrikerOut: true, allowRuns: true },
   { id: "hit_wicket", label: "Hit wicket", needsFielder: false },
-  { id: "retired_out", label: "Retired out", needsFielder: false },
-  { id: "retired_hurt", label: "Retired not out", needsFielder: false, notOut: true },
+  { id: "retired_out", label: "Retired out", needsFielder: false, isNotABall: true, allowEitherBatter: true },
+  { id: "retired_hurt", label: "Retired not out", needsFielder: false, notOut: true, isNotABall: true, allowEitherBatter: true },
   { id: "other", label: "Other", needsFielder: false },
 ];
 

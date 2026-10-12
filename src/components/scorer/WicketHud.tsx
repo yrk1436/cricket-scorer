@@ -72,6 +72,9 @@ export default function WicketHud({
     setIncomingId("");
   }, [open, strikerId]);
 
+  const needsRetiringBatterPick = option?.allowEitherBatter ?? false;
+  const retiringBatterSelected = needsRetiringBatterPick ? outId !== "" : true;
+
   const incomingCandidates = useMemo(
     () =>
       batsmen.filter(
@@ -112,7 +115,7 @@ export default function WicketHud({
 
   function pickType(opt: DismissalOption) {
     setDismissal(opt.id);
-    setOutId(strikerId);
+    setOutId(opt.allowEitherBatter ? "" : strikerId);
     setStep("detail");
   }
 
@@ -120,6 +123,7 @@ export default function WicketHud({
     if (!option) return;
     if (option.needsFielder && !fielderId) return;
     if (!incomingOptional && !incomingId) return;
+    if (!retiringBatterSelected) return;
 
     onSubmit({
       runsOffBat: option.allowRuns ? runsOffBat : 0,
@@ -127,7 +131,7 @@ export default function WicketHud({
       extraNb: 0,
       extraByes: option.allowRuns ? extraByes : 0,
       extraLegByes: 0,
-      countsAsLegalDelivery: true,
+      countsAsLegalDelivery: !option.isNotABall,
       isWicket: true,
       dismissal,
       dismissedBatsmanId: outId,
@@ -179,9 +183,11 @@ export default function WicketHud({
             ← Change dismissal ({option?.label})
           </button>
 
-          {option?.allowNonStrikerOut && (
+          {(option?.allowNonStrikerOut || option?.allowEitherBatter) && (
             <fieldset className="mb-3">
-              <legend className="picker-label">Who is out?</legend>
+              <legend className="picker-label">
+                {option?.allowEitherBatter ? "Who is retiring?" : "Who is out?"}
+              </legend>
               <div className="touch-choice">
                 <button
                   type="button"
@@ -298,7 +304,8 @@ export default function WicketHud({
               disabled={
                 busy ||
                 (option?.needsFielder && !fielderId) ||
-                (!incomingOptional && !incomingId)
+                (!incomingOptional && !incomingId) ||
+                !retiringBatterSelected
               }
               className="hud-btn danger flex-1 disabled:opacity-40"
               onClick={() => confirm()}

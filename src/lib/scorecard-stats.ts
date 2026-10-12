@@ -18,6 +18,8 @@ export type BattingRow = {
   out: boolean;
   dismissal: string;
   didNotBat: boolean;
+  /** Batter retired (not out or out) — not currently at the crease */
+  isRetired: boolean;
 };
 
 export type BowlingRow = {
@@ -142,6 +144,7 @@ function computeBatting(
     dismissal: string;
     batted: boolean;
     order: number;
+    isRetired: boolean;
   };
 
   const acc = new Map<string, Acc>();
@@ -152,9 +155,10 @@ function computeBatting(
       fours: 0,
       sixes: 0,
       out: false,
-      dismissal: "did not bat",
+      dismissal: "",
       batted: false,
       order: p.sort_order,
+      isRetired: false,
     });
   }
 
@@ -203,9 +207,23 @@ function computeBatting(
       if (a) {
         if (d.dismissal === "retired_hurt") {
           a.dismissal = "retired not out";
+          a.isRetired = true;
+        } else if (d.dismissal === "retired_out") {
+          a.dismissal = "retired out";
+          a.out = true;
+          a.isRetired = true;
         } else {
           a.out = true;
           a.dismissal = formatDismissal(d, name);
+        }
+      }
+
+      if (d.incoming_striker_id) {
+        markBatted(d.incoming_striker_id);
+        const incAcc = acc.get(d.incoming_striker_id);
+        if (incAcc && incAcc.isRetired && !incAcc.out) {
+          incAcc.isRetired = false;
+          incAcc.dismissal = "";
         }
       }
     }
@@ -215,6 +233,16 @@ function computeBatting(
   for (const p of lineup) {
     const a = acc.get(p.id)!;
     const sr = a.balls > 0 ? (a.runs / a.balls) * 100 : 0;
+
+    let dismissalText: string;
+    if (!a.batted) {
+      dismissalText = "did not bat";
+    } else if (a.dismissal) {
+      dismissalText = a.dismissal;
+    } else {
+      dismissalText = "not out";
+    }
+
     rows.push({
       playerId: p.id,
       name: p.display_name,
@@ -224,8 +252,9 @@ function computeBatting(
       sixes: a.sixes,
       strikeRate: sr,
       out: a.out,
-      dismissal: a.batted ? (a.out ? a.dismissal : "not out") : "did not bat",
+      dismissal: dismissalText,
       didNotBat: !a.batted,
+      isRetired: a.isRetired,
     });
   }
 

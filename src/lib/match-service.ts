@@ -460,14 +460,16 @@ export async function changeBowler(
     ? currentOver[0].bowler_id
     : inn.current_bowler_id;
 
-  if (currentOver.length === 0) {
+  const deliveriesWithBowler = currentOver.filter((d) => d.bowler_id != null);
+
+  if (deliveriesWithBowler.length === 0) {
     const { error } = await sb()
       .from("innings")
       .update({ current_bowler_id: newBowlerId })
       .eq("id", inn.id);
     if (error) throw new Error(error.message);
   } else {
-    const deliveryIds = currentOver.map((d) => d.id);
+    const deliveryIds = deliveriesWithBowler.map((d) => d.id);
     const { error } = await sb()
       .from("deliveries")
       .update({ bowler_id: newBowlerId })
@@ -496,7 +498,7 @@ export async function changeBowler(
 
   return {
     previousBowlerId,
-    deliveriesUpdated: currentOver.length,
+    deliveriesUpdated: deliveriesWithBowler.length,
   };
 }
 
@@ -525,15 +527,16 @@ export async function revertBowlerChange(
 
   const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
   const currentOver = currentOverDeliveries(dels, m.max_balls_per_over ?? 0);
+  const deliveriesWithBowler = currentOver.filter((d) => d.bowler_id != null);
 
-  if (currentOver.length === 0) {
+  if (deliveriesWithBowler.length === 0) {
     const { error } = await sb()
       .from("innings")
       .update({ current_bowler_id: previousBowlerId })
       .eq("id", inn.id);
     if (error) throw new Error(error.message);
   } else {
-    const deliveryIds = currentOver.map((d) => d.id);
+    const deliveryIds = deliveriesWithBowler.map((d) => d.id);
     const { error } = await sb()
       .from("deliveries")
       .update({ bowler_id: previousBowlerId })
@@ -560,7 +563,7 @@ export async function revertBowlerChange(
     await recomputeAllInningsAndSummary(m.id);
   }
 
-  return { deliveriesUpdated: currentOver.length };
+  return { deliveriesUpdated: deliveriesWithBowler.length };
 }
 
 export async function updateMatchSettings(
@@ -839,7 +842,11 @@ export async function appendDelivery(
   const bowlingSide = opposite(target.batting_side as TeamSide);
   let bowlerIdInsert: string | null = null;
 
-  if (!body.strikeSwap) {
+  const isRetirement =
+    body.isWicket &&
+    (body.dismissal === "retired_out" || body.dismissal === "retired_hurt");
+
+  if (!body.strikeSwap && !isRetirement) {
     const bid = body.bowlerId;
     if (!bid) throw new Error("Bowler is required");
 
