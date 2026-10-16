@@ -1,5 +1,9 @@
-import Scorecard from "@/components/Scorecard";
-import { fetchBundle, getMatchByPublicId } from "@/lib/match-service";
+import PublicMatchView from "@/components/PublicMatchView";
+import {
+  fetchBundle,
+  getMatchByPublicId,
+  toPublicBundle,
+} from "@/lib/match-service";
 import { notFound } from "next/navigation";
 
 export default async function PublicMatchPage({
@@ -11,15 +15,11 @@ export default async function PublicMatchPage({
   const m = await getMatchByPublicId(publicId);
   if (!m) notFound();
 
-  const bundle = await fetchBundle(m);
+  const bundle = toPublicBundle(await fetchBundle(m));
 
   return (
     <main>
-      <Scorecard
-        bundle={bundle}
-        variant="public"
-        readOnlyBanner="Anyone with this link can view only."
-      />
+      <PublicMatchView bundle={bundle} />
     </main>
   );
 }

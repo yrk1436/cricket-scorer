@@ -2,6 +2,7 @@ import { bad, ok } from "@/lib/api-json";
 import {
   fetchBundle,
   getMatchByPublicId,
+  toPublicBundle,
 } from "@/lib/match-service";
 
 export async function GET(
@@ -12,14 +13,8 @@ export async function GET(
   try {
     const m = await getMatchByPublicId(publicId);
     if (!m) return bad("Not found", 404);
-    const bundle = await fetchBundle(m);
-    return ok({
-      bundle: {
-        ...bundle,
-        match: { ...bundle.match, edit_history: undefined },
-      },
-      readOnly: true,
-    });
+    const bundle = toPublicBundle(await fetchBundle(m));
+    return ok({ bundle, readOnly: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     return bad(msg, 500);

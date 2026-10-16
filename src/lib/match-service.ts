@@ -120,6 +120,19 @@ export async function fetchBundle(match: DbMatch): Promise<MatchBundle> {
   };
 }
 
+/** Strip scorer secrets before sending a bundle to the public share page. */
+export function toPublicBundle(bundle: MatchBundle): MatchBundle {
+  return {
+    ...bundle,
+    match: {
+      ...bundle.match,
+      write_token: "",
+      pin_hash: "",
+      edit_history: undefined,
+    },
+  };
+}
+
 function lastInningsByIndex(bundle: MatchBundle): DbInnings | null {
   if (bundle.innings.length === 0) return null;
   return [...bundle.innings].sort((a, b) => b.index_num - a.index_num)[0] ?? null;
