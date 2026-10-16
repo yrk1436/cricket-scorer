@@ -13,7 +13,13 @@ export async function GET(
     const m = await getMatchByPublicId(publicId);
     if (!m) return bad("Not found", 404);
     const bundle = await fetchBundle(m);
-    return ok({ bundle, readOnly: true });
+    return ok({
+      bundle: {
+        ...bundle,
+        match: { ...bundle.match, edit_history: undefined },
+      },
+      readOnly: true,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     return bad(msg, 500);

@@ -33,6 +33,23 @@ export type DbMatch = {
   result_summary: string | null;
   created_at: string;
   updated_at: string;
+  /** Ball-correction audit log. Omitted on older rows until first edit. */
+  edit_history?: MatchEditLogEntry[];
+};
+
+export type MatchEditChange = {
+  field: string;
+  from: string;
+  to: string;
+};
+
+export type MatchEditLogEntry = {
+  at: string;
+  actor: string;
+  deliveryId: string;
+  inningsIndex: number;
+  ballLabel: string;
+  changes: MatchEditChange[];
 };
 
 export type DbPlayer = {

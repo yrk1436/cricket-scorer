@@ -1465,6 +1465,124 @@
   border: 0;
 }
 
+.cricket-app .edit-innings {
+  padding: 14px 14px 10px;
+}
+
+.cricket-app .edit-innings-title {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.cricket-app .edit-innings-title span {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.cricket-app .edit-over + .edit-over {
+  margin-top: 12px;
+}
+
+.cricket-app .edit-ball-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cricket-app .edit-ball-row {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cricket-app .edit-ball-row:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.cricket-app .edit-ball-row:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cricket-app .edit-ball-row.wicket {
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.cricket-app .edit-ball-num {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.cricket-app .edit-ball-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cricket-app .edit-ball-line {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cricket-app .edit-ball-meta {
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cricket-app .edit-ball-score {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  min-width: 2.2ch;
+  text-align: right;
+}
+
+.cricket-app .edit-history {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cricket-app .edit-history-when {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.cricket-app .edit-history-what {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+}
+
 @media print {
   .cricket-app {
     background: #fff;

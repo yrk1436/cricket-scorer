@@ -12,6 +12,7 @@ import {
   computeInningsScorecard,
   formatExtrasLine,
   formatFallOfWickets,
+  formatPartnerships,
   type InningsScorecard,
 } from "@/lib/scorecard-stats";
 import {
@@ -373,6 +374,13 @@ function FullInningsCard({
         <>
           <p className="section-title">Fall of wickets</p>
           <p className="fow-line">{formatFallOfWickets(card.fallOfWickets)}</p>
+        </>
+      )}
+
+      {card.partnerships.length > 0 && (
+        <>
+          <p className="section-title">Partnerships</p>
+          <p className="fow-line">{formatPartnerships(card.partnerships)}</p>
         </>
       )}
 

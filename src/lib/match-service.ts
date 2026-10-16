@@ -16,6 +16,16 @@ import {
   wicketIncreasesCount,
 } from "@/lib/game";
 import { isEditUnlockedForMatch } from "@/lib/edit-unlock";
+import {
+  appendEditHistory,
+  applyDeliveryEdit,
+  ballLabelForDelivery,
+  derivedMatchState,
+  describeDeliveryChanges,
+  isRetirementDismissal,
+  isSpecialDelivery,
+  type DeliveryEditInput,
+} from "@/lib/recompute";
 import type {
   DbDelivery,
   DbInnings,
@@ -23,6 +33,7 @@ import type {
   DbPlayer,
   DismissalType,
   MatchBundle,
+  MatchEditLogEntry,
   MatchStatus,
   TeamSide,
   TossChoice,
@@ -132,35 +143,46 @@ function findLastDeliveryGlobal(bundle: MatchBundle): {
 
 async function recomputeAllInningsAndSummary(matchId: string) {
   const m = await getMatchById(matchId);
-  if (!m || m.status !== "completed") return;
+  if (!m) return;
 
-  let bundle = await fetchBundle(m);
-  for (const inn of bundle.innings) {
-    const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
-    await persistInningsState(inn, bundle.players, dels, m.max_balls_per_over ?? 0);
-  }
-
-  bundle = await fetchBundle(m);
-
-  const inningsLike = [...bundle.innings]
-    .sort((a, b) => a.index_num - b.index_num)
-    .map((i) => ({
-      batting_side: i.batting_side as TeamSide,
-      runs: i.runs,
-      wickets: i.wickets,
-      completed: i.completed,
-    }));
-
-  const { winnerSide, summary } = summarizeResult({
+  const bundle = await fetchBundle(m);
+  const derived = derivedMatchState({
     teamAName: m.team_a_name,
     teamBName: m.team_b_name,
-    innings: inningsLike,
     inningsCount: m.innings_count,
+    players: bundle.players,
+    innings: bundle.innings,
+    deliveriesByInningsId: bundle.deliveriesByInningsId,
+    maxBallsPerOver: m.max_balls_per_over ?? 0,
   });
+
+  for (const inn of bundle.innings) {
+    const next = derived.innings.find((d) => d.id === inn.id);
+    if (!next) continue;
+    const dels = bundle.deliveriesByInningsId[inn.id] ?? [];
+    const lb = lastBowlingDelivery(dels);
+    const { error } = await sb()
+      .from("innings")
+      .update({
+        runs: next.runs,
+        wickets: next.wickets,
+        balls_legal: next.balls_legal,
+        current_striker_id: next.strikerId,
+        current_non_striker_id: next.nonStrikerId,
+        current_bowler_id: lb?.bowler_id ?? inn.current_bowler_id ?? null,
+      })
+      .eq("id", inn.id);
+    if (error) throw new Error(error.message);
+  }
+
+  if (m.status !== "completed") return;
 
   const { error } = await sb()
     .from("matches")
-    .update({ winner_side: winnerSide, result_summary: summary })
+    .update({
+      winner_side: derived.result.winnerSide,
+      result_summary: derived.result.summary,
+    })
     .eq("id", matchId);
 
   if (error) throw new Error(error.message);
@@ -1639,6 +1661,168 @@ export async function replaceCreasePlayer(
   if (isCompleted) {
     await recomputeAllInningsAndSummary(m.id);
   }
+}
+
+function findDeliveryInBundle(
+  bundle: MatchBundle,
+  deliveryId: string,
+): { inn: DbInnings; del: DbDelivery } | null {
+  for (const inn of bundle.innings) {
+    const del = (bundle.deliveriesByInningsId[inn.id] ?? []).find(
+      (d) => d.id === deliveryId,
+    );
+    if (del) return { inn, del };
+  }
+  return null;
+}
+
+export async function updateDelivery(
+  writeToken: string,
+  deliveryId: string,
+  input: DeliveryEditInput,
+  unlockCookie?: string,
+) {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status === "completed" && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  const bundle = await fetchBundle(m);
+  const hit = findDeliveryInBundle(bundle, deliveryId);
+  if (!hit) throw new Error("Delivery not found");
+
+  const { inn, del } = hit;
+  if (isSpecialDelivery(del)) {
+    throw new Error("Cannot edit strike-swap or crease-replace rows");
+  }
+
+  const batSide = inn.batting_side as TeamSide;
+  const bowlSide = opposite(batSide);
+  const retirement =
+    input.isWicket && isRetirementDismissal(input.dismissal);
+
+  const striker = bundle.players.find((p) => p.id === input.strikerId);
+  const nonStriker = bundle.players.find((p) => p.id === input.nonStrikerId);
+  if (!striker || striker.side !== batSide) {
+    throw new Error("Striker must be on the batting team");
+  }
+  if (!nonStriker || nonStriker.side !== batSide) {
+    throw new Error("Non-striker must be on the batting team");
+  }
+  if (input.strikerId === input.nonStrikerId) {
+    throw new Error("Striker and non-striker must be different");
+  }
+
+  if (!retirement) {
+    if (!input.bowlerId) throw new Error("Bowler is required");
+    const bowler = bundle.players.find((p) => p.id === input.bowlerId);
+    if (!bowler || bowler.side !== bowlSide) {
+      throw new Error("Bowler must be on the bowling team");
+    }
+  }
+
+  if (input.isWicket) {
+    if (input.dismissal === "none") {
+      throw new Error("Choose a dismissal type");
+    }
+    const outId = input.dismissedBatsmanId ?? input.strikerId;
+    if (outId !== input.strikerId && outId !== input.nonStrikerId) {
+      throw new Error("Dismissed player must be the striker or non-striker");
+    }
+    const outP = bundle.players.find((p) => p.id === outId);
+    if (!outP || outP.side !== batSide) {
+      throw new Error("Dismissed player must be on the batting team");
+    }
+    input = { ...input, dismissedBatsmanId: outId };
+
+    const needsFielder =
+      input.dismissal === "caught" ||
+      input.dismissal === "stumped" ||
+      input.dismissal === "run_out";
+    if (needsFielder) {
+      if (!input.fielderId) throw new Error("Choose a fielder for this dismissal");
+      const fp = bundle.players.find((p) => p.id === input.fielderId);
+      if (!fp || fp.side !== bowlSide) {
+        throw new Error("Fielder must be on the bowling team");
+      }
+    } else {
+      input = { ...input, fielderId: null, fielderAssistId: null };
+    }
+
+    if (input.incomingStrikerId) {
+      const inc = bundle.players.find((p) => p.id === input.incomingStrikerId);
+      if (!inc || inc.side !== batSide || inc.did_not_bat) {
+        throw new Error("Incoming batter must be on the batting team");
+      }
+      if (
+        inc.id === input.strikerId ||
+        inc.id === input.nonStrikerId ||
+        inc.id === outId
+      ) {
+        throw new Error("Incoming batter cannot already be at the crease");
+      }
+    }
+  }
+
+  const next = applyDeliveryEdit(del, input);
+  const pName = (id: string | null | undefined) =>
+    bundle.players.find((p) => p.id === id)?.display_name ?? "—";
+  const changes = describeDeliveryChanges(del, next, pName);
+  if (changes.length === 0) return { ok: true, unchanged: true };
+
+  const { error } = await sb()
+    .from("deliveries")
+    .update({
+      striker_id: next.striker_id,
+      non_striker_id: next.non_striker_id,
+      bowler_id: next.bowler_id,
+      runs_off_bat: next.runs_off_bat,
+      extra_wide: next.extra_wide,
+      extra_nb: next.extra_nb,
+      extra_byes: next.extra_byes,
+      extra_leg_byes: next.extra_leg_byes ?? 0,
+      counts_as_legal_delivery: next.counts_as_legal_delivery,
+      is_wicket: next.is_wicket,
+      dismissal: next.dismissal,
+      dismissed_batsman_id: next.dismissed_batsman_id ?? null,
+      incoming_striker_id: next.incoming_striker_id ?? null,
+      fielder_id: next.fielder_id ?? null,
+      fielder_assist_id: next.fielder_assist_id ?? null,
+    })
+    .eq("id", del.id)
+    .eq("innings_id", inn.id);
+
+  if (error) throw new Error(error.message);
+
+  const innDels = bundle.deliveriesByInningsId[inn.id] ?? [];
+  const historyEntry: MatchEditLogEntry = {
+    at: new Date().toISOString(),
+    actor:
+      m.status === "completed" ? "Scorer (PIN unlocked)" : "Scorer",
+    deliveryId: del.id,
+    inningsIndex: inn.index_num,
+    ballLabel: ballLabelForDelivery(innDels, del.id),
+    changes,
+  };
+  const history = appendEditHistory(m.edit_history, historyEntry);
+  const { error: histErr } = await sb()
+    .from("matches")
+    .update({ edit_history: history })
+    .eq("id", m.id);
+  if (histErr) {
+    // Column is optional on older DBs — don't fail the correction.
+    console.warn("edit_history update skipped:", histErr.message);
+  }
+
+  await recomputeAllInningsAndSummary(m.id);
+
+  if (m.status === "live") {
+    await maybeAutoFinishLiveMatch(writeToken, m);
+  }
+
+  return { ok: true, unchanged: false };
 }
 
 /** Public helpers — server-only */

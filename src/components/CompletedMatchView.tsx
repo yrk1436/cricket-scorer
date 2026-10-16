@@ -9,12 +9,14 @@ type Props = {
   bundle: SerialBundle;
   writeToken: string;
   onUnlocked: () => void;
+  onUnlockedToEdit?: () => void;
 };
 
 export default function CompletedMatchView({
   bundle,
   writeToken,
   onUnlocked,
+  onUnlockedToEdit,
 }: Props) {
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,8 +24,7 @@ export default function CompletedMatchView({
 
   const apiRoot = `/api/matches/write/${encodeURIComponent(writeToken)}`;
 
-  async function unlock(e: React.FormEvent) {
-    e.preventDefault();
+  async function unlock(intent: "pad" | "edit") {
     setBusy(true);
     setErr(null);
     try {
@@ -35,7 +36,8 @@ export default function CompletedMatchView({
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Unlock failed");
       setPin("");
-      onUnlocked();
+      if (intent === "edit" && onUnlockedToEdit) onUnlockedToEdit();
+      else onUnlocked();
     } catch (x) {
       setErr(x instanceof Error ? x.message : String(x));
     } finally {
@@ -48,7 +50,7 @@ export default function CompletedMatchView({
       <header className="top-bar no-print">
         <div>
           <h1>Match complete</h1>
-          <p className="sub">Read-only scorecard · enter PIN to edit</p>
+          <p className="sub">Read-only scorecard · enter PIN to edit balls</p>
         </div>
         <span className="badge done">Done</span>
       </header>
@@ -61,28 +63,44 @@ export default function CompletedMatchView({
 
       <Scorecard bundle={bundle} variant="public" />
 
-      <form onSubmit={unlock} className="glass no-print" style={{ padding: 16 }}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void unlock("pad");
+        }}
+        className="glass no-print"
+        style={{ padding: 16 }}
+      >
         <p className="mb-2 text-sm font-medium">Scorer: enter match PIN to fix scores</p>
         <p className="mb-3 text-xs opacity-70">
-          Unlocks the scoring pad on this device for 2 hours.
+          Unlocks scoring and ball-by-ball corrections on this device for 2 hours.
         </p>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <input
+            type="password"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            placeholder="Match PIN"
+            autoComplete="off"
+          />
+        </div>
         <div className="field-row">
-          <div className="field" style={{ marginBottom: 0 }}>
-            <input
-              type="password"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="Match PIN"
-              autoComplete="off"
-            />
-          </div>
           <button
             type="submit"
             disabled={busy || !pin}
-            className="hud-btn primary"
-            style={{ alignSelf: "end" }}
+            className="hud-btn"
+            style={{ flex: 1 }}
           >
-            Edit scores
+            Unlock scoring
+          </button>
+          <button
+            type="button"
+            disabled={busy || !pin}
+            className="hud-btn primary"
+            style={{ flex: 1 }}
+            onClick={() => void unlock("edit")}
+          >
+            Edit match
           </button>
         </div>
         {err && <div className="error-banner mt-3">{err}</div>}
