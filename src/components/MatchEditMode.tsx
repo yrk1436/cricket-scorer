@@ -9,6 +9,7 @@ import {
   describeDraftOps,
   dismissalCreasePropagation,
   diffMatchScorecards,
+  effectiveReplaceFromOrder,
   findInningsContinuityIssues,
   replayDraftOps,
   validateDeliveryEdit,
@@ -97,7 +98,8 @@ export default function MatchEditMode({
   const [replaceFrom, setReplaceFrom] = useState("");
   const [replaceTo, setReplaceTo] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [sheetError, setSheetError] = useState<string | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
   const [propagateDismissed, setPropagateDismissed] = useState(true);
   const [recheckNote, setRecheckNote] = useState<string | null>(null);
   const recheckRef = useRef<HTMLElement | null>(null);
@@ -173,7 +175,7 @@ export default function MatchEditMode({
   }, [dirty]);
 
   function openBall(d: DbDelivery) {
-    setSheetError(null);
+    setEditorError(null);
     setEditing(d);
     setForm(deliveryEditFromRow(d));
     setPropagateDismissed(true);
@@ -182,7 +184,7 @@ export default function MatchEditMode({
   function closeEditor() {
     setEditing(null);
     setForm(null);
-    setSheetError(null);
+    setEditorError(null);
     setPropagateDismissed(true);
   }
 
@@ -198,7 +200,7 @@ export default function MatchEditMode({
   }
 
   function openReplace(d: DbDelivery) {
-    setSheetError(null);
+    setReplaceError(null);
     setReplacing(d);
     const leaving = d.is_wicket
       ? (d.dismissed_batsman_id ?? d.non_striker_id ?? d.striker_id ?? "")
@@ -215,7 +217,7 @@ export default function MatchEditMode({
     setReplacing(null);
     setReplaceFrom("");
     setReplaceTo("");
-    setSheetError(null);
+    setReplaceError(null);
   }
 
   const editorInn = editing
@@ -256,7 +258,7 @@ export default function MatchEditMode({
       players,
     });
     if (inputErr) {
-      setSheetError(inputErr);
+      setEditorError(inputErr);
       return;
     }
     const nextOps: DraftOp[] = [
@@ -277,7 +279,7 @@ export default function MatchEditMode({
       deliveriesByInningsId: nextDraft,
     });
     if (logErr) {
-      setSheetError(logErr);
+      setEditorError(logErr);
       return;
     }
     setOps(nextOps);
@@ -299,16 +301,22 @@ export default function MatchEditMode({
       players,
     });
     if (replaceErr) {
-      setSheetError(replaceErr);
+      setReplaceError(replaceErr);
       return false;
     }
+    const fromDisplayOrder =
+      effectiveReplaceFromOrder(
+        draftDels[next.delivery.innings_id] ?? [],
+        next.delivery,
+        next.delivery.display_order,
+      ) ?? next.delivery.display_order;
     const nextOps: DraftOp[] = [
       ...ops,
       {
         kind: "replace",
         deliveryId: next.delivery.id,
         inningsId: next.delivery.innings_id,
-        fromDisplayOrder: next.delivery.display_order,
+        fromDisplayOrder,
         fromId: next.fromId,
         toId: next.toId,
       },
@@ -320,7 +328,7 @@ export default function MatchEditMode({
       deliveriesByInningsId: nextDraft,
     });
     if (logErr) {
-      setSheetError(logErr);
+      setReplaceError(logErr);
       return false;
     }
     setOps(nextOps);
@@ -592,9 +600,9 @@ export default function MatchEditMode({
       >
         {form && editing && (
           <PickerGroup>
-            {sheetError ? (
+            {editorError ? (
               <div className="error-banner mb-3" role="alert">
-                {sheetError}
+                {editorError}
               </div>
             ) : null}
             <p className="mb-3 text-sm opacity-80">
@@ -604,7 +612,17 @@ export default function MatchEditMode({
             <PickerField
               label="Striker"
               value={form.strikerId}
-              onChange={(id) => setForm((f) => (f ? { ...f, strikerId: id } : f))}
+              onChange={(id) =>
+                setForm((f) => {
+                  if (!f) return f;
+                  const dismissed =
+                    f.dismissedBatsmanId === id ||
+                    f.dismissedBatsmanId === f.nonStrikerId
+                      ? f.dismissedBatsmanId
+                      : id;
+                  return { ...f, strikerId: id, dismissedBatsmanId: dismissed };
+                })
+              }
               options={batsmen.map((p) => ({ id: p.id, label: p.display_name }))}
               required
               disabled={busy}
@@ -613,7 +631,15 @@ export default function MatchEditMode({
               label="Non-striker"
               value={form.nonStrikerId}
               onChange={(id) =>
-                setForm((f) => (f ? { ...f, nonStrikerId: id } : f))
+                setForm((f) => {
+                  if (!f) return f;
+                  const dismissed =
+                    f.dismissedBatsmanId === id ||
+                    f.dismissedBatsmanId === f.strikerId
+                      ? f.dismissedBatsmanId
+                      : f.strikerId;
+                  return { ...f, nonStrikerId: id, dismissedBatsmanId: dismissed };
+                })
               }
               options={batsmen.map((p) => ({ id: p.id, label: p.display_name }))}
               required
@@ -795,8 +821,8 @@ export default function MatchEditMode({
                     >
                       Striker — {pName(form.strikerId)}
                     </button>
-                    {(dismissalOpt?.allowNonStrikerOut ||
-                      dismissalOpt?.allowEitherBatter) && (
+                    {form.nonStrikerId &&
+                      form.nonStrikerId !== form.strikerId && (
                       <button
                         type="button"
                         className={`touch-choice-btn${form.dismissedBatsmanId === form.nonStrikerId ? " selected" : ""}`}
@@ -955,9 +981,9 @@ export default function MatchEditMode({
       >
         {replacing && (
           <PickerGroup>
-            {sheetError ? (
+            {replaceError ? (
               <div className="error-banner mb-3" role="alert">
-                {sheetError}
+                {replaceError}
               </div>
             ) : null}
             <p className="mb-3 text-sm opacity-80">

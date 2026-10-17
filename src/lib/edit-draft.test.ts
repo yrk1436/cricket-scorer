@@ -875,6 +875,44 @@ describe("replace batter from this ball onward", () => {
     ).toHaveLength(0);
   });
 
+  it("starting on the 7.0 retirement keeps that record and puts Roop on 7.2+", () => {
+    const draft = replayDraftOps(
+      { "inn-1": savedRetirement },
+      [
+        {
+          kind: "replace",
+          deliveryId: "d-ret",
+          inningsId: "inn-1",
+          fromDisplayOrder: 1,
+          fromId: "bat-2",
+          toId: "bat-1",
+        },
+      ],
+    );
+    const balls = draft["inn-1"];
+    expect(balls[0].striker_id).toBe("bat-1");
+    expect(balls[0].non_striker_id).toBe("bat-2");
+    expect(balls[0].dismissed_batsman_id).toBe("bat-2");
+    expect(balls[0].dismissal).toBe("retired_hurt");
+    expect(balls[1].striker_id).toBe("bat-1");
+    expect(balls[2].striker_id).toBe("bat-1");
+    expect(balls[2].non_striker_id).toBe("bat-3");
+    expect(
+      validateDraftLogs({
+        innings: [inningsRow()],
+        players: makePlayers(),
+        deliveriesByInningsId: draft,
+      }),
+    ).toBeNull();
+    expect(
+      findInningsContinuityIssues({
+        innings: [inningsRow()],
+        deliveriesByInningsId: draft,
+        name: nameOf,
+      }),
+    ).toHaveLength(0);
+  });
+
   it("does not two-way swap: the replacement stays on later balls", () => {
     const draft = replayDraftOps(
       { "inn-1": savedRetirement },

@@ -181,13 +181,25 @@ export function replayDraftOps(
       next[op.inningsId] = updated;
     } else if (op.kind === "replace") {
       const start = list.find((d) => d.id === op.deliveryId);
+      const fromOrder = effectiveReplaceFromOrder(
+        list,
+        start,
+        op.fromDisplayOrder,
+      );
+      if (fromOrder == null) {
+        next[op.inningsId] = list.map((d) => ({ ...d }));
+        continue;
+      }
       next[op.inningsId] = replaceCreaseBatterFromDelivery(
         list,
-        op.fromDisplayOrder,
+        fromOrder,
         op.fromId,
         op.toId,
-        incomingForReplace(list, op.fromId, op.fromDisplayOrder) ??
-          start?.incoming_striker_id,
+        incomingForReplace(
+          list,
+          op.fromId,
+          start?.display_order ?? op.fromDisplayOrder,
+        ) ?? start?.incoming_striker_id,
       );
     } else {
       next[op.inningsId] = swapBattersFromDelivery(
@@ -340,6 +352,22 @@ export function validateDeliveryEdit(params: {
   }
 
   return null;
+}
+
+/** If replace starts on a wicket/retirement, apply from the next ball. */
+export function effectiveReplaceFromOrder(
+  deliveries: DbDelivery[],
+  start: DbDelivery | undefined,
+  requestedOrder: number,
+): number | null {
+  const origin =
+    start ??
+    deliveries.find((d) => d.display_order === requestedOrder);
+  if (!origin?.is_wicket) return requestedOrder;
+  const later = deliveries
+    .filter((d) => d.display_order > origin.display_order)
+    .sort((a, b) => a.display_order - b.display_order);
+  return later[0]?.display_order ?? null;
 }
 
 function incomingForReplace(
