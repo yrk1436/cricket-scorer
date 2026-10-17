@@ -8,6 +8,7 @@ import {
   describeDraftOps,
   dismissalCreasePropagation,
   diffMatchScorecards,
+  effectiveReplaceFromOrder,
   findInningsContinuityIssues,
   replayDraftOps,
   StaleMatchEditError,
@@ -18,7 +19,12 @@ import {
   validateSwap,
   type DraftOp,
 } from "./edit-draft";
-import { applyDeliveryEdit, derivedMatchState, type DeliveryEditInput } from "./recompute";
+import {
+  applyDeliveryEdit,
+  ballLabelForDelivery,
+  derivedMatchState,
+  type DeliveryEditInput,
+} from "./recompute";
 import { computeInningsScorecard } from "./scorecard-stats";
 import type { DbDelivery, DbInnings, DbPlayer } from "./types";
 
@@ -911,6 +917,164 @@ describe("replace batter from this ball onward", () => {
         name: nameOf,
       }),
     ).toHaveLength(0);
+  });
+
+  it("7.0 retired not out Deepak (striker Roop, NS Deepak) replace yields Roop from 7.2", () => {
+    const players: DbPlayer[] = [
+      {
+        id: "roop",
+        match_id: "m1",
+        side: "a",
+        display_name: "Roop",
+        sort_order: 0,
+        did_not_bat: false,
+      },
+      {
+        id: "deepak",
+        match_id: "m1",
+        side: "a",
+        display_name: "Deepak",
+        sort_order: 1,
+        did_not_bat: false,
+      },
+      {
+        id: "inc",
+        match_id: "m1",
+        side: "a",
+        display_name: "Incoming",
+        sort_order: 2,
+        did_not_bat: false,
+      },
+      {
+        id: "bowl-1",
+        match_id: "m1",
+        side: "b",
+        display_name: "Bowler",
+        sort_order: 0,
+        did_not_bat: false,
+      },
+    ];
+    const name = (id: string | null | undefined) =>
+      players.find((p) => p.id === id)?.display_name ?? "—";
+
+    const pads = Array.from({ length: 42 }, (_, i) =>
+      makeDelivery({
+        id: `pad-${i}`,
+        display_order: i + 1,
+        striker_id: "roop",
+        non_striker_id: "deepak",
+        runs_off_bat: 0,
+      }),
+    );
+    const retirement = makeDelivery({
+      id: "d-7-0",
+      display_order: 43,
+      striker_id: "roop",
+      non_striker_id: "deepak",
+      bowler_id: null,
+      runs_off_bat: 0,
+      counts_as_legal_delivery: false,
+      is_wicket: true,
+      dismissal: "retired_hurt",
+      dismissed_batsman_id: "deepak",
+      incoming_striker_id: "inc",
+    });
+    const ball71 = makeDelivery({
+      id: "d-7-1",
+      display_order: 44,
+      striker_id: "roop",
+      non_striker_id: "inc",
+      runs_off_bat: 1,
+    });
+    const ball72 = makeDelivery({
+      id: "d-7-2",
+      display_order: 45,
+      striker_id: "deepak",
+      non_striker_id: "inc",
+      runs_off_bat: 2,
+    });
+    const ball73 = makeDelivery({
+      id: "d-7-3",
+      display_order: 46,
+      striker_id: "deepak",
+      non_striker_id: "inc",
+      runs_off_bat: 1,
+    });
+    const log = [...pads, retirement, ball71, ball72, ball73];
+
+    expect(ballLabelForDelivery(log, "d-7-0")).toBe("7.0 ret");
+    expect(ballLabelForDelivery(log, "d-7-2")).toBe("7.2");
+    expect(
+      effectiveReplaceFromOrder(log, retirement, retirement.display_order),
+    ).toBe(ball71.display_order);
+
+    expect(
+      validateReplace({
+        delivery: retirement,
+        fromId: "deepak",
+        toId: "roop",
+        battingSide: "a",
+        players,
+      }),
+    ).toBeNull();
+
+    const issues = findInningsContinuityIssues({
+      innings: [inningsRow()],
+      deliveriesByInningsId: { "inn-1": log },
+      name,
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0].removeId).toBe("deepak");
+    expect(issues[0].stayId).toBe("roop");
+    expect(issues[0].fromLabel).toBe("7.1");
+    expect(issues[0].fixLabel).toBe("Fix: replace Deepak with Roop from 7.1");
+
+    const fromRetirement: DraftOp = {
+      kind: "replace",
+      deliveryId: "d-7-0",
+      inningsId: "inn-1",
+      fromDisplayOrder: retirement.display_order,
+      fromId: "deepak",
+      toId: "roop",
+    };
+    const fromRecheck: DraftOp = {
+      kind: "replace",
+      deliveryId: issues[0].fromDeliveryId,
+      inningsId: "inn-1",
+      fromDisplayOrder: issues[0].fromDisplayOrder,
+      fromId: issues[0].removeId,
+      toId: issues[0].stayId,
+    };
+
+    for (const op of [fromRetirement, fromRecheck]) {
+      const draft = replayDraftOps({ "inn-1": log }, [op]);
+      const balls = draft["inn-1"];
+      const ret = balls.find((d) => d.id === "d-7-0")!;
+      const later = balls.filter((d) => d.display_order >= ball72.display_order);
+
+      expect(ret.striker_id).toBe("roop");
+      expect(ret.non_striker_id).toBe("deepak");
+      expect(ret.dismissed_batsman_id).toBe("deepak");
+      expect(ret.dismissal).toBe("retired_hurt");
+      expect(later.every((d) => d.striker_id === "roop")).toBe(true);
+      expect(later.every((d) => d.non_striker_id === "inc")).toBe(true);
+      expect(later.some((d) => d.striker_id === "deepak")).toBe(false);
+
+      expect(
+        validateDraftLogs({
+          innings: [inningsRow()],
+          players,
+          deliveriesByInningsId: draft,
+        }),
+      ).toBeNull();
+      expect(
+        findInningsContinuityIssues({
+          innings: [inningsRow()],
+          deliveriesByInningsId: draft,
+          name,
+        }),
+      ).toHaveLength(0);
+    }
   });
 
   it("does not two-way swap: the replacement stays on later balls", () => {
