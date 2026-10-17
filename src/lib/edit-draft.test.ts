@@ -6,6 +6,7 @@ import {
   changedDeliveries,
   deliveryIdsByInnings,
   describeDraftOps,
+  dismissalCreasePropagation,
   diffMatchScorecards,
   replayDraftOps,
   StaleMatchEditError,
@@ -346,7 +347,7 @@ describe("validation", () => {
         battingSide: "a",
         players: makePlayers(),
       }),
-    ).toMatch(/cannot appear again/i);
+    ).toMatch(/out or retired out is still batting/i);
   });
 
   it("allows a retired-not-out batter to return later", () => {
@@ -540,5 +541,236 @@ describe("apply payload identity and stale writes", () => {
         deliveriesByInningsId: draft,
       }).innings[0].runs,
     ).toBe(5);
+  });
+});
+
+describe("dismissal crease propagation", () => {
+  const retirementLog = [
+    makeDelivery({
+      id: "d0",
+      display_order: 1,
+      runs_off_bat: 1,
+      striker_id: "bat-2",
+      non_striker_id: "bat-1",
+    }),
+    makeDelivery({
+      id: "d-ret",
+      display_order: 2,
+      striker_id: "bat-2",
+      non_striker_id: "bat-1",
+      bowler_id: null,
+      runs_off_bat: 0,
+      counts_as_legal_delivery: false,
+      is_wicket: true,
+      dismissal: "retired_hurt",
+      dismissed_batsman_id: "bat-1",
+      incoming_striker_id: "bat-3",
+    }),
+    makeDelivery({
+      id: "d-next",
+      display_order: 3,
+      striker_id: "bat-1",
+      non_striker_id: "bat-3",
+      runs_off_bat: 1,
+    }),
+    makeDelivery({
+      id: "d-later",
+      display_order: 4,
+      striker_id: "bat-2",
+      non_striker_id: "bat-3",
+      runs_off_bat: 2,
+    }),
+  ];
+
+  const flipWhoRetired = baseEdit({
+    strikerId: "bat-2",
+    nonStrikerId: "bat-1",
+    bowlerId: null,
+    runsOffBat: 0,
+    isWicket: true,
+    dismissal: "retired_hurt",
+    dismissedBatsmanId: "bat-2",
+    incomingStrikerId: "bat-3",
+  });
+
+  it("replaces the newly retired batter with the previous one from the next ball onward", () => {
+    const prop = dismissalCreasePropagation(retirementLog[1], flipWhoRetired);
+    expect(prop).toEqual({ removeId: "bat-2", stayId: "bat-1" });
+
+    const draft = replayDraftOps(
+      { "inn-1": retirementLog },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d-ret",
+          inningsId: "inn-1",
+          input: flipWhoRetired,
+          propagateDismissed: true,
+        },
+      ],
+    )["inn-1"];
+
+    expect(draft[0].striker_id).toBe("bat-2");
+    expect(draft[1].dismissed_batsman_id).toBe("bat-2");
+    expect(draft[2].striker_id).toBe("bat-1");
+    expect(draft[2].non_striker_id).toBe("bat-3");
+    expect(draft[3].striker_id).toBe("bat-1");
+    expect(draft[3].non_striker_id).toBe("bat-3");
+
+    const described = describeDraftOps(
+      { "inn-1": retirementLog },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d-ret",
+          inningsId: "inn-1",
+          input: flipWhoRetired,
+          propagateDismissed: true,
+        },
+      ],
+      nameOf,
+    );
+    expect(described.operations[0].summary).toMatch(/later crease Raj → Ali/);
+  });
+
+  it("does not rewrite later creases when propagate is off", () => {
+    const draft = replayDraftOps(
+      { "inn-1": retirementLog },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d-ret",
+          inningsId: "inn-1",
+          input: flipWhoRetired,
+          propagateDismissed: false,
+        },
+      ],
+    )["inn-1"];
+    expect(draft[3].striker_id).toBe("bat-2");
+  });
+
+  it("uses incoming when replacing would put the same batter at both ends", () => {
+    const pairLater = [
+      makeDelivery({
+        id: "d-ret",
+        display_order: 1,
+        striker_id: "bat-2",
+        non_striker_id: "bat-1",
+        bowler_id: null,
+        runs_off_bat: 0,
+        counts_as_legal_delivery: false,
+        is_wicket: true,
+        dismissal: "retired_hurt",
+        dismissed_batsman_id: "bat-1",
+        incoming_striker_id: "bat-3",
+      }),
+      makeDelivery({
+        id: "d2",
+        display_order: 2,
+        striker_id: "bat-2",
+        non_striker_id: "bat-1",
+        runs_off_bat: 1,
+      }),
+    ];
+    const draft = replayDraftOps(
+      { "inn-1": pairLater },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d-ret",
+          inningsId: "inn-1",
+          input: flipWhoRetired,
+          propagateDismissed: true,
+        },
+      ],
+    )["inn-1"];
+    expect(draft[1].striker_id).toBe("bat-3");
+    expect(draft[1].non_striker_id).toBe("bat-1");
+  });
+
+  it("flags a later ball where a retired-out batter is still batting", () => {
+    const dels = [
+      makeDelivery({
+        id: "d1",
+        display_order: 1,
+        is_wicket: true,
+        dismissal: "retired_out",
+        counts_as_legal_delivery: false,
+        bowler_id: null,
+        dismissed_batsman_id: "bat-1",
+        incoming_striker_id: "bat-3",
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+      }),
+      makeDelivery({
+        id: "d2",
+        display_order: 2,
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+        runs_off_bat: 1,
+      }),
+    ];
+    expect(
+      validateInningsLog({
+        deliveries: dels,
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toMatch(/out or retired out is still batting/i);
+  });
+
+  it("propagates a regular wicket who-is-out change onto later creases", () => {
+    const dels = [
+      makeDelivery({
+        id: "d1",
+        display_order: 1,
+        is_wicket: true,
+        dismissal: "bowled",
+        dismissed_batsman_id: "bat-1",
+        incoming_striker_id: "bat-3",
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+      }),
+      makeDelivery({
+        id: "d2",
+        display_order: 2,
+        striker_id: "bat-3",
+        non_striker_id: "bat-2",
+        runs_off_bat: 1,
+      }),
+      makeDelivery({
+        id: "d3",
+        display_order: 3,
+        striker_id: "bat-1",
+        non_striker_id: "bat-3",
+        runs_off_bat: 1,
+      }),
+    ];
+    const draft = replayDraftOps(
+      { "inn-1": dels },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d1",
+          inningsId: "inn-1",
+          input: baseEdit({
+            isWicket: true,
+            dismissal: "bowled",
+            dismissedBatsmanId: "bat-2",
+            incomingStrikerId: "bat-3",
+          }),
+          propagateDismissed: true,
+        },
+      ],
+    )["inn-1"];
+    expect(draft[0].dismissed_batsman_id).toBe("bat-2");
+    expect(draft[2].striker_id).toBe("bat-1");
+    expect(
+      validateInningsLog({
+        deliveries: draft,
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toBeNull();
   });
 });

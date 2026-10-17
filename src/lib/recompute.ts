@@ -188,6 +188,40 @@ export function swapBattersFromDelivery(
   });
 }
 
+/**
+ * After changing who is out/retired, replace that batter with the one who
+ * should have stayed, on later crease (striker / non-striker) only.
+ * If both ends would become the same name, the wicket's incoming batter
+ * takes the vacated end.
+ */
+export function replaceCreaseBatterFromDelivery(
+  deliveries: DbDelivery[],
+  fromDisplayOrder: number,
+  fromId: string,
+  toId: string,
+  incomingId?: string | null,
+): DbDelivery[] {
+  if (!fromId || !toId || fromId === toId) return deliveries.map((d) => ({ ...d }));
+  return deliveries.map((d) => {
+    if (d.display_order < fromDisplayOrder) return { ...d };
+    const next = { ...d };
+    const strikerWas = next.striker_id;
+    const nsWas = next.non_striker_id;
+    if (next.striker_id === fromId) next.striker_id = toId;
+    if (next.non_striker_id === fromId) next.non_striker_id = toId;
+    if (
+      next.striker_id &&
+      next.striker_id === next.non_striker_id &&
+      incomingId &&
+      incomingId !== next.striker_id
+    ) {
+      if (strikerWas === fromId) next.striker_id = incomingId;
+      else if (nsWas === fromId) next.non_striker_id = incomingId;
+    }
+    return next;
+  });
+}
+
 export function derivedMatchState(params: {
   teamAName: string;
   teamBName: string;

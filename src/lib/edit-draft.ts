@@ -6,6 +6,7 @@ import {
   describeDeliveryChanges,
   isRetirementDismissal,
   isSpecialDelivery,
+  replaceCreaseBatterFromDelivery,
   replaceDelivery,
   swapBattersFromDelivery,
   type DeliveryEditInput,
@@ -41,7 +42,35 @@ export type DraftBallOp = {
   deliveryId: string;
   inningsId: string;
   input: DeliveryEditInput;
+  /** Replace the newly dismissed batter with the previous one on later creases. */
+  propagateDismissed?: boolean;
 };
+
+export type DismissalCreasePropagation = {
+  removeId: string;
+  stayId: string;
+};
+
+export function dismissedIdFromDelivery(d: DbDelivery): string {
+  return d.dismissed_batsman_id || d.striker_id || "";
+}
+
+export function dismissedIdFromInput(input: DeliveryEditInput): string {
+  if (!input.isWicket) return "";
+  return input.dismissedBatsmanId || input.strikerId || "";
+}
+
+/** When who is out/retired changes, later crease names need the old batter back. */
+export function dismissalCreasePropagation(
+  before: DbDelivery,
+  input: DeliveryEditInput,
+): DismissalCreasePropagation | null {
+  if (!input.isWicket || !before.is_wicket) return null;
+  const stayId = dismissedIdFromDelivery(before);
+  const removeId = dismissedIdFromInput(input);
+  if (!stayId || !removeId || stayId === removeId) return null;
+  return { removeId, stayId };
+}
 
 export type DraftSwapOp = {
   kind: "swap";
@@ -108,10 +137,24 @@ export function replayDraftOps(
     if (op.kind === "ball") {
       const current = list.find((d) => d.id === op.deliveryId);
       if (!current) continue;
-      next[op.inningsId] = replaceDelivery(
-        list,
-        applyDeliveryEdit(current, op.input),
-      );
+      const edited = applyDeliveryEdit(current, op.input);
+      let updated = replaceDelivery(list, edited);
+      if (op.propagateDismissed) {
+        const prop = dismissalCreasePropagation(current, op.input);
+        const later = updated
+          .filter((d) => d.display_order > current.display_order)
+          .sort((a, b) => a.display_order - b.display_order);
+        if (prop && later[0]) {
+          updated = replaceCreaseBatterFromDelivery(
+            updated,
+            later[0].display_order,
+            prop.removeId,
+            prop.stayId,
+            edited.incoming_striker_id,
+          );
+        }
+      }
+      next[op.inningsId] = updated;
     } else {
       next[op.inningsId] = swapBattersFromDelivery(
         list,
@@ -330,7 +373,7 @@ export function validateInningsLog(params: {
     const crease = [striker, nonStriker];
     for (const id of crease) {
       if (outIds.has(id)) {
-        return "A batter who is out cannot appear again";
+        return "A batter who is out or retired out is still batting later in the innings";
       }
     }
 
@@ -361,7 +404,7 @@ export function validateInningsLog(params: {
           return "Incoming batter cannot already be at the crease";
         }
         if (outIds.has(inc)) {
-          return "A batter who is out cannot appear again";
+          return "A batter who is out or retired out is still batting later in the innings";
         }
       }
 
@@ -639,7 +682,14 @@ export function describeDraftOps(
           ? changes.map((c) => `${c.field} ${c.from} → ${c.to}`).join(", ")
           : "no field change";
       const who = name(after?.striker_id ?? before?.striker_id);
-      operations.push({ summary: `${label}  ${who} ${changeText}` });
+      let summary = `${label}  ${who} ${changeText}`;
+      if (op.propagateDismissed && before) {
+        const prop = dismissalCreasePropagation(before, op.input);
+        if (prop) {
+          summary += ` · later crease ${name(prop.removeId)} → ${name(prop.stayId)}`;
+        }
+      }
+      operations.push({ summary });
     } else {
       operations.push({
         summary: `${label}  swap ${name(op.a)} ↔ ${name(op.b)} from here onward`,
@@ -717,6 +767,7 @@ export function parseDraftOps(raw: unknown): DraftOp[] {
         kind: "ball",
         deliveryId,
         inningsId,
+        propagateDismissed: Boolean(row.propagateDismissed),
         input: {
           strikerId: String(input.strikerId ?? ""),
           nonStrikerId: String(input.nonStrikerId ?? ""),

@@ -1465,31 +1465,58 @@
   border: 0;
 }
 
-.cricket-app .edit-draft-banner {
-  padding: 12px;
-  border-radius: var(--radius);
-  border: 1px solid rgba(251, 191, 36, 0.35);
-  background: rgba(251, 191, 36, 0.1);
+.cricket-app .phone-shell.has-edit-dock {
+  padding-bottom: calc(132px + env(safe-area-inset-bottom));
+}
+
+.cricket-app .edit-draft-inline {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--extra);
+}
+
+.cricket-app .edit-draft-dock {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, var(--phone-w));
+  bottom: 0;
+  z-index: 80;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(251, 191, 36, 0.5);
+  background: #10261d;
+  box-shadow: 0 -16px 32px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .cricket-app .edit-draft-count {
   margin: 0;
   font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.cricket-app .edit-draft-ops {
-  font-weight: 500;
-  color: var(--muted);
+  font-weight: 700;
 }
 
 .cricket-app .edit-draft-actions {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
+}
+
+.cricket-app .edit-propagate {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 12px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.cricket-app .edit-propagate input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .cricket-app .hud-sheet-tall {
@@ -1563,35 +1590,30 @@
 }
 
 .cricket-app .edit-ball-row.changed {
-  border-color: rgba(251, 191, 36, 0.45);
-  background: rgba(251, 191, 36, 0.08);
-}
-
-.cricket-app .edit-ball-tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 2px 4px;
+  border-color: var(--extra);
+  background: rgba(251, 191, 36, 0.16);
+  box-shadow: inset 3px 0 0 var(--extra);
 }
 
 .cricket-app .edit-swap-btn {
+  width: 100%;
   min-height: 44px;
+  margin: 4px 0 8px;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: rgba(56, 189, 248, 0.08);
   color: var(--swap);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .cricket-app .edit-changed-mark {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   text-transform: lowercase;
   color: var(--extra);
 }
@@ -1685,6 +1707,10 @@
   font-weight: 600;
   min-width: 2.2ch;
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 .cricket-app .edit-history {

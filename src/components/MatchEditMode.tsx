@@ -7,6 +7,7 @@ import {
   buildApplyPayload,
   changedDeliveries,
   describeDraftOps,
+  dismissalCreasePropagation,
   diffMatchScorecards,
   replayDraftOps,
   validateDeliveryEdit,
@@ -96,6 +97,7 @@ export default function MatchEditMode({
   const [swapB, setSwapB] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
+  const [propagateDismissed, setPropagateDismissed] = useState(true);
 
   const dirty = ops.length > 0;
   const sideName = (side: TeamSide) =>
@@ -171,12 +173,14 @@ export default function MatchEditMode({
     setSheetError(null);
     setEditing(d);
     setForm(deliveryEditFromRow(d));
+    setPropagateDismissed(true);
   }
 
   function closeEditor() {
     setEditing(null);
     setForm(null);
     setSheetError(null);
+    setPropagateDismissed(true);
   }
 
   function requestCloseEditor() {
@@ -252,6 +256,8 @@ export default function MatchEditMode({
         deliveryId: editing.id,
         inningsId: editing.innings_id,
         input: form,
+        propagateDismissed:
+          !!dismissalCreasePropagation(editing, form) && propagateDismissed,
       },
     ];
     const nextDraft = replayDraftOps(deliveriesByInningsId, nextOps);
@@ -339,8 +345,11 @@ export default function MatchEditMode({
     ? derived.result.summary
     : match.result_summary;
 
+  const whoOutPropagation =
+    editing && form ? dismissalCreasePropagation(editing, form) : null;
+
   return (
-    <div className="phone-shell">
+    <div className={`phone-shell${dirty ? " has-edit-dock" : ""}`}>
       <header className="top-bar no-print">
         <div>
           <h1>Edit match</h1>
@@ -356,38 +365,9 @@ export default function MatchEditMode({
       {error && <div className="error-banner no-print">{error}</div>}
 
       {dirty && (
-        <div className="edit-draft-banner no-print" role="region" aria-label="Unsaved draft">
-          <p className="edit-draft-count" aria-live="polite">
-            {changeWord(ops.length)}
-            <span className="edit-draft-ops"> · {opSummary}</span>
-          </p>
-          <div className="edit-draft-actions">
-            <button
-              type="button"
-              className="hud-btn"
-              disabled={busy}
-              onClick={() => setPreviewOpen(true)}
-            >
-              Preview
-            </button>
-            <button
-              type="button"
-              className="hud-btn primary"
-              disabled={busy}
-              onClick={() => void applyDraft()}
-            >
-              {busy ? "Saving…" : "Apply"}
-            </button>
-            <button
-              type="button"
-              className="hud-btn danger"
-              disabled={busy}
-              onClick={discardDraft}
-            >
-              Discard
-            </button>
-          </div>
-        </div>
+        <p className="edit-draft-inline no-print" aria-live="polite">
+          Draft · {opSummary}
+        </p>
       )}
 
       {resultText && (
@@ -433,7 +413,7 @@ export default function MatchEditMode({
                             disabled={!row.editable || busy}
                             aria-label={
                               row.editable
-                                ? `Edit ball ${row.ballLabel}, ${pName(d.striker_id)}`
+                                ? `Edit ball ${row.ballLabel}, ${pName(d.striker_id)}${changed ? ", changed" : ""}`
                                 : `Ball ${row.ballLabel} (not editable)`
                             }
                             onClick={() => row.editable && openBall(d)}
@@ -459,23 +439,11 @@ export default function MatchEditMode({
                                 : wkt && totalRunsOnDelivery(d) === 0
                                   ? "W"
                                   : extraShort(d)}
+                              {changed ? (
+                                <span className="edit-changed-mark">changed</span>
+                              ) : null}
                             </span>
                           </button>
-                          {row.editable && (
-                            <div className="edit-ball-tools">
-                              <button
-                                type="button"
-                                className="edit-swap-btn"
-                                disabled={busy}
-                                onClick={() => openSwap(d)}
-                              >
-                                Swap batters
-                              </button>
-                              {changed && (
-                                <span className="edit-changed-mark">changed</span>
-                              )}
-                            </div>
-                          )}
                         </li>
                       );
                     })}
@@ -534,7 +502,8 @@ export default function MatchEditMode({
               </div>
             ) : null}
             <p className="mb-3 text-sm opacity-80">
-              Added to the draft only. Nothing is saved until you tap Apply.
+              Added to the draft only. Nothing is saved until you tap Apply
+              in the bar at the bottom.
             </p>
             <PickerField
               label="Striker"
@@ -809,6 +778,33 @@ export default function MatchEditMode({
               </>
             )}
 
+            {whoOutPropagation && (
+              <label className="edit-propagate">
+                <input
+                  type="checkbox"
+                  checked={propagateDismissed}
+                  onChange={(e) => setPropagateDismissed(e.target.checked)}
+                />
+                <span>
+                  From the next ball, replace {pName(whoOutPropagation.removeId)}{" "}
+                  with {pName(whoOutPropagation.stayId)} at the crease
+                </span>
+              </label>
+            )}
+
+            <button
+              type="button"
+              className="edit-swap-btn"
+              disabled={busy}
+              onClick={() => {
+                const d = editing;
+                closeEditor();
+                if (d) openSwap(d);
+              }}
+            >
+              Swap batters from this ball onward
+            </button>
+
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
@@ -948,6 +944,44 @@ export default function MatchEditMode({
           </div>
         )}
       </HudModal>
+
+      {dirty && (
+        <div
+          className="edit-draft-dock no-print"
+          role="region"
+          aria-label="Unsaved draft"
+        >
+          <p className="edit-draft-count" aria-live="polite">
+            {changeWord(ops.length)}
+          </p>
+          <div className="edit-draft-actions">
+            <button
+              type="button"
+              className="hud-btn"
+              disabled={busy}
+              onClick={() => setPreviewOpen(true)}
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              className="hud-btn danger"
+              disabled={busy}
+              onClick={discardDraft}
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              className="hud-btn primary"
+              disabled={busy}
+              onClick={() => void applyDraft()}
+            >
+              {busy ? "Saving…" : "Apply"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
