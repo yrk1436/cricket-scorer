@@ -150,6 +150,14 @@ function cloneDeliveries(
   return next;
 }
 
+function normalizeRetirementRows(list: DbDelivery[]): DbDelivery[] {
+  return list.map((d) => {
+    if (!d.is_wicket || !isRetirementDismissal(d.dismissal)) return d;
+    if (!d.counts_as_legal_delivery) return d;
+    return { ...d, counts_as_legal_delivery: false };
+  });
+}
+
 export function replayDraftOps(
   deliveriesByInningsId: Record<string, DbDelivery[]>,
   ops: DraftOp[],
@@ -209,6 +217,9 @@ export function replayDraftOps(
         op.b,
       );
     }
+  }
+  for (const [id, list] of Object.entries(next)) {
+    next[id] = normalizeRetirementRows(list);
   }
   return next;
 }

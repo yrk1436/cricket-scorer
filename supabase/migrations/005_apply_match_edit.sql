@@ -70,7 +70,7 @@ begin
       extra_leg_byes = coalesce((v_patch->>'extra_leg_byes')::int, 0),
       counts_as_legal_delivery = coalesce((v_patch->>'counts_as_legal_delivery')::boolean, true),
       is_wicket = coalesce((v_patch->>'is_wicket')::boolean, false),
-      dismissal = coalesce(v_patch->>'dismissal', 'none'),
+      dismissal = coalesce(v_patch->>'dismissal', 'none')::public.dismissal_type,
       dismissed_batsman_id = nullif(v_patch->>'dismissed_batsman_id', '')::uuid,
       incoming_striker_id = nullif(v_patch->>'incoming_striker_id', '')::uuid,
       fielder_id = nullif(v_patch->>'fielder_id', '')::uuid,

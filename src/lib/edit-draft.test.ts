@@ -835,6 +835,52 @@ describe("replace batter from this ball onward", () => {
     expect(draft[2].non_striker_id).toBe("bat-3");
   });
 
+  it("heals a stored retirement that was marked as a legal ball", () => {
+    const dels = [
+      makeDelivery({
+        id: "d-ret",
+        display_order: 1,
+        is_wicket: true,
+        dismissal: "retired_hurt",
+        counts_as_legal_delivery: true,
+        bowler_id: "bowl-1",
+        dismissed_batsman_id: "bat-1",
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+      }),
+      makeDelivery({
+        id: "d2",
+        display_order: 2,
+        runs_off_bat: 1,
+        striker_id: "bat-3",
+        non_striker_id: "bat-2",
+      }),
+    ];
+    const draft = replayDraftOps(
+      { "inn-1": dels },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d2",
+          inningsId: "inn-1",
+          input: baseEdit({
+            strikerId: "bat-3",
+            nonStrikerId: "bat-2",
+            runsOffBat: 2,
+          }),
+        },
+      ],
+    );
+    expect(draft["inn-1"][0].counts_as_legal_delivery).toBe(false);
+    expect(
+      validateDraftLogs({
+        innings: [inningsRow()],
+        players: makePlayers(),
+        deliveriesByInningsId: draft,
+      }),
+    ).toBeNull();
+  });
+
   it("allows replacing with a crease batter or retired-not-out batter", () => {
     expect(
       validateReplace({
@@ -1075,6 +1121,45 @@ describe("replace batter from this ball onward", () => {
         }),
       ).toHaveLength(0);
     }
+  });
+
+  it("also moves who-is-out when that batter leaves a later wicket crease", () => {
+    const withLaterWicket = [
+      ...savedRetirement,
+      makeDelivery({
+        id: "d-out",
+        display_order: 4,
+        striker_id: "bat-2",
+        non_striker_id: "bat-3",
+        is_wicket: true,
+        dismissal: "bowled",
+        dismissed_batsman_id: "bat-2",
+        incoming_striker_id: null,
+      }),
+    ];
+    const draft = replayDraftOps(
+      { "inn-1": withLaterWicket },
+      [
+        {
+          kind: "replace",
+          deliveryId: "d-ret",
+          inningsId: "inn-1",
+          fromDisplayOrder: 1,
+          fromId: "bat-2",
+          toId: "bat-1",
+        },
+      ],
+    )["inn-1"];
+    expect(draft[0].dismissed_batsman_id).toBe("bat-2");
+    expect(draft[3].striker_id).toBe("bat-1");
+    expect(draft[3].dismissed_batsman_id).toBe("bat-1");
+    expect(
+      validateDraftLogs({
+        innings: [inningsRow()],
+        players: makePlayers(),
+        deliveriesByInningsId: { "inn-1": draft },
+      }),
+    ).toBeNull();
   });
 
   it("does not two-way swap: the replacement stays on later balls", () => {

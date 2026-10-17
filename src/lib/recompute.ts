@@ -210,6 +210,12 @@ export function replaceCreaseBatterFromDelivery(
     if (next.striker_id === fromId) next.striker_id = toId;
     if (next.non_striker_id === fromId) next.non_striker_id = toId;
     if (
+      next.dismissed_batsman_id === fromId &&
+      (strikerWas === fromId || nsWas === fromId)
+    ) {
+      next.dismissed_batsman_id = toId;
+    }
+    if (
       next.striker_id &&
       next.striker_id === next.non_striker_id &&
       incomingId &&
