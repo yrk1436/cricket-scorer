@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:verify": "node scripts/verify-db.mjs",
-    "test": "vitest run"
+    "qa:duplicate": "node scripts/duplicate-match.mjs --preset qa",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",
@@ -25,6 +27,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "@playwright/test": "^1.56.1",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",

@@ -3,6 +3,7 @@ import {
   computeInningsScorecard,
   formatExtrasLine,
   formatFallOfWickets,
+  formatPartnerships,
 } from "@/lib/scorecard-stats";
 import type { DbDelivery, DbInnings, DbMatch, DbPlayer } from "@/lib/types";
 
@@ -82,6 +83,9 @@ export function bundleToPlaintext(b: SerialBundle): string {
       lines.push(`Extras ${card.extras.total} (${formatExtrasLine(card.extras)})`);
       if (card.fallOfWickets.length) {
         lines.push(`Fall of wickets: ${formatFallOfWickets(card.fallOfWickets)}`);
+      }
+      if (card.partnerships.length) {
+        lines.push(`Partnerships: ${formatPartnerships(card.partnerships)}`);
       }
 
       if (card.bowling.length) {

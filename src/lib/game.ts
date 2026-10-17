@@ -257,6 +257,8 @@ export function replayInnings(
   for (let i = 0; i < sorted.length; i++) {
     const d = sorted[i];
     if (d.is_strike_swap) {
+      if (d.striker_id) strikerId = d.striker_id;
+      if (d.non_striker_id) nonStrikerId = d.non_striker_id;
       [strikerId, nonStrikerId] = swap(strikerId, nonStrikerId);
       continue;
     }
@@ -279,6 +281,10 @@ export function replayInnings(
       }
       continue;
     }
+
+    // Ball log is the crease source of truth (phase 2 can rewrite later balls).
+    if (d.striker_id) strikerId = d.striker_id;
+    if (d.non_striker_id) nonStrikerId = d.non_striker_id;
 
     runs += totalRunsOnDelivery(d);
 

@@ -33,6 +33,27 @@ export type DbMatch = {
   result_summary: string | null;
   created_at: string;
   updated_at: string;
+  /** Ball-correction audit log. Omitted on older rows until first edit. */
+  edit_history?: MatchEditLogEntry[];
+};
+
+export type MatchEditChange = {
+  field: string;
+  from: string;
+  to: string;
+};
+
+export type MatchEditLogEntry = {
+  at: string;
+  actor: string;
+  deliveryId?: string;
+  inningsIndex?: number;
+  ballLabel?: string;
+  changes: MatchEditChange[];
+  /** Phase 2 Apply writes one session line; Phase 1 rows are kind "ball" or omitted. */
+  kind?: "ball" | "session";
+  summary?: string;
+  operations?: { summary: string }[];
 };
 
 export type DbPlayer = {

@@ -10,6 +10,8 @@ import HeroScore from "@/components/scorer/HeroScore";
 import PickerField, { PickerGroup } from "@/components/scorer/PickerField";
 import ScoringPad from "@/components/scorer/ScoringPad";
 import CompletedMatchView from "@/components/CompletedMatchView";
+import MatchEditMode from "@/components/MatchEditMode";
+import type { ApplyMatchEditPayload } from "@/lib/edit-draft";
 import ReplaceBatterHud from "@/components/ReplaceBatterHud";
 import WicketHud from "@/components/scorer/WicketHud";
 import IncomingBatterHud from "@/components/IncomingBatterHud";
@@ -85,6 +87,7 @@ export default function ScorerWorkbench({
   const [bowlerHudMode, setBowlerHudMode] = useState<"new_over" | "opening" | "mid_over">("new_over");
   const [openingHudOpen, setOpeningHudOpen] = useState(true);
   const [scorecardSheetOpen, setScorecardSheetOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const prevNeedsBowlerRef = useRef(false);
   const [lastBowlerChange, setLastBowlerChange] = useState<{
     previousBowlerId: string | null;
@@ -535,7 +538,7 @@ export default function ScorerWorkbench({
     );
   }, [batsmen, match.status, replaceHud.pickLeaving, sim]);
 
-  if (match.status === "completed" && locked) {
+  if (match.status === "completed" && locked && !editMode) {
     return (
       <CompletedMatchView
         bundle={bundle}
@@ -543,6 +546,36 @@ export default function ScorerWorkbench({
         onUnlocked={async () => {
           setLocked(false);
           await refresh();
+        }}
+        onUnlockedToEdit={async () => {
+          setLocked(false);
+          setEditMode(true);
+          await refresh();
+        }}
+      />
+    );
+  }
+
+  if (editMode && (match.status === "live" || !locked)) {
+    return (
+      <MatchEditMode
+        bundle={bundle}
+        busy={busy}
+        error={err}
+        onClose={() => {
+          setEditMode(false);
+          setErr(null);
+        }}
+        onApply={async (payload: ApplyMatchEditPayload) => {
+          return exec(async () => {
+            const r = await fetch(`${apiRoot}/edit-draft`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            const j = await r.json();
+            if (!r.ok) throw new Error(j.error ?? "Could not apply draft");
+          });
         }}
       />
     );
@@ -935,6 +968,18 @@ export default function ScorerWorkbench({
         >
           Scorecard
         </button>
+        {allowPad && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setErr(null);
+              setEditMode(true);
+            }}
+          >
+            Edit match
+          </button>
+        )}
         {match.status === "completed" && allowPad && (
           <button
             type="button"

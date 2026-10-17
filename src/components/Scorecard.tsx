@@ -12,6 +12,7 @@ import {
   computeInningsScorecard,
   formatExtrasLine,
   formatFallOfWickets,
+  formatPartnerships,
   type InningsScorecard,
 } from "@/lib/scorecard-stats";
 import {
@@ -29,6 +30,8 @@ type Props = {
   showBallList?: boolean;
   /** Public share page uses compact mockup cards. */
   variant?: "default" | "public";
+  /** Completed public scorecard: open PIN → edit mode. */
+  onEditMatch?: () => void;
 };
 
 function fmtRate(n: number): string {
@@ -46,6 +49,7 @@ export default function Scorecard({
   readOnlyBanner,
   showBallList = true,
   variant = "default",
+  onEditMatch,
 }: Props) {
   const { match, players, innings, deliveriesByInningsId } = bundle;
   const sideName = (side: "a" | "b") =>
@@ -66,6 +70,22 @@ export default function Scorecard({
       <div
         className={`scorecard-wrap phone-shell${completed ? " phone-shell-wide" : ""}`}
       >
+        {completed && onEditMatch ? (
+          <header className="top-bar no-print">
+            <div>
+              <h1>Match complete</h1>
+              <p className="sub">Read-only scorecard · PIN to correct balls</p>
+            </div>
+            <button
+              type="button"
+              className="hud-btn primary"
+              onClick={onEditMatch}
+            >
+              Edit match
+            </button>
+          </header>
+        ) : null}
+
         <section className="hero-score glass">
           {completed && sorted.length >= 2 ? (
             <MatchResultHeader innings={sorted} sideName={sideName} />
@@ -189,6 +209,11 @@ export default function Scorecard({
             })}
 
         <div className="toolbar no-print">
+          {completed && onEditMatch ? (
+            <button type="button" className="primary" onClick={onEditMatch}>
+              Edit match
+            </button>
+          ) : null}
           <button type="button" className="primary" onClick={() => copyTxt()}>
             Copy scorecard
           </button>
@@ -373,6 +398,13 @@ function FullInningsCard({
         <>
           <p className="section-title">Fall of wickets</p>
           <p className="fow-line">{formatFallOfWickets(card.fallOfWickets)}</p>
+        </>
+      )}
+
+      {card.partnerships.length > 0 && (
+        <>
+          <p className="section-title">Partnerships</p>
+          <p className="fow-line">{formatPartnerships(card.partnerships)}</p>
         </>
       )}
 

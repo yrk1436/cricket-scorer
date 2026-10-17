@@ -1465,6 +1465,318 @@
   border: 0;
 }
 
+.cricket-app .phone-shell.has-edit-dock {
+  padding-bottom: calc(132px + env(safe-area-inset-bottom));
+}
+
+.cricket-app .edit-draft-inline {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--extra);
+}
+
+.cricket-app .edit-draft-dock {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, var(--phone-w));
+  bottom: 0;
+  z-index: 80;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(251, 191, 36, 0.5);
+  background: #10261d;
+  box-shadow: 0 -16px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cricket-app .edit-draft-count {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.cricket-app .edit-draft-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.cricket-app .edit-propagate {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 12px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.cricket-app .edit-propagate input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.cricket-app .edit-recheck {
+  padding: 12px 14px;
+}
+
+.cricket-app .edit-recheck-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cricket-app .edit-recheck-head h2 {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.cricket-app .edit-recheck-note {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: var(--extra);
+}
+
+.cricket-app .edit-recheck-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cricket-app .edit-recheck-list p {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+}
+
+.cricket-app .edit-crease-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.cricket-app .hud-sheet-tall {
+  max-height: min(92vh, calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+}
+
+.cricket-app .edit-innings {
+  padding: 14px 14px 10px;
+}
+
+.cricket-app .edit-innings-title {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.cricket-app .edit-innings-title span {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.cricket-app .edit-over + .edit-over {
+  margin-top: 12px;
+}
+
+.cricket-app .edit-ball-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cricket-app .edit-ball-row {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cricket-app .edit-ball-row:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.cricket-app .edit-ball-row:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cricket-app .edit-ball-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cricket-app .edit-ball-row.wicket {
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.cricket-app .edit-ball-row.changed {
+  border-color: var(--extra);
+  background: rgba(251, 191, 36, 0.16);
+  box-shadow: inset 3px 0 0 var(--extra);
+}
+
+.cricket-app .edit-swap-btn {
+  width: 100%;
+  min-height: 44px;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(56, 189, 248, 0.08);
+  color: var(--swap);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cricket-app .edit-changed-mark {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  color: var(--extra);
+}
+
+.cricket-app .edit-diff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cricket-app .edit-diff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.cricket-app .edit-diff-row.changed {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.cricket-app .edit-diff-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.cricket-app .edit-diff-values {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-align: right;
+}
+
+.cricket-app .edit-diff-from {
+  color: var(--muted);
+}
+
+.cricket-app .edit-diff-to {
+  color: var(--accent);
+}
+
+.cricket-app .edit-preview-inn {
+  margin-top: 14px;
+}
+
+.cricket-app .edit-preview-inn h3 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+}
+
+.cricket-app .edit-history-ops {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 0.75rem;
+}
+
+.cricket-app .edit-ball-num {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.cricket-app .edit-ball-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cricket-app .edit-ball-line {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cricket-app .edit-ball-meta {
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cricket-app .edit-ball-score {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  min-width: 2.2ch;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cricket-app .edit-history {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cricket-app .edit-history-when {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.cricket-app .edit-history-what {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+}
+
 @media print {
   .cricket-app {
     background: #fff;

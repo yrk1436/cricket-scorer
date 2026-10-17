@@ -12,6 +12,7 @@ import {
   computeInningsScorecard,
   formatExtrasLine,
   formatFallOfWickets,
+  formatPartnerships,
   type InningsScorecard,
 } from "@/lib/scorecard-stats";
 import type { DbDelivery, DbInnings, DbPlayer, DbMatch, TeamSide } from "@/lib/types";
@@ -171,6 +172,15 @@ function LiveInningsCard({
             Fall of wickets
           </p>
           <p className="fow-line">{formatFallOfWickets(card.fallOfWickets)}</p>
+        </>
+      )}
+
+      {card.partnerships.length > 0 && (
+        <>
+          <p className="section-title" style={{ marginTop: 12 }}>
+            Partnerships
+          </p>
+          <p className="fow-line">{formatPartnerships(card.partnerships)}</p>
         </>
       )}
 

@@ -1,5 +1,6 @@
 import {
   ballsToOvers,
+  CREASE_REPLACE_NOTE,
   eligibleBatters,
   runRate,
   totalRunsOnDelivery,
@@ -47,11 +48,23 @@ export type ExtrasBreakdown = {
   total: number;
 };
 
+export type Partnership = {
+  batterAId: string;
+  batterBId: string;
+  batterAName: string;
+  batterBName: string;
+  runs: number;
+  balls: number;
+  /** Team wicket number when this stand ended; null if unbroken. */
+  endedWicket: number | null;
+};
+
 export type InningsScorecard = {
   batting: BattingRow[];
   bowling: BowlingRow[];
   fallOfWickets: FallOfWicket[];
   extras: ExtrasBreakdown;
+  partnerships: Partnership[];
 };
 
 function bowlerGetsWicket(dismissal: DismissalType): boolean {
@@ -375,6 +388,67 @@ function computeFallOfWickets(
   return fow;
 }
 
+function computePartnerships(
+  deliveries: DbDelivery[],
+  name: (id: string | null | undefined) => string,
+): Partnership[] {
+  const sorted = sortedDeliveries(deliveries).filter(
+    (d) => d.note !== CREASE_REPLACE_NOTE,
+  );
+  if (sorted.length === 0) return [];
+
+  const out: Partnership[] = [];
+  let a = sorted[0].striker_id ?? "";
+  let b = sorted[0].non_striker_id ?? "";
+  let runs = 0;
+  let balls = 0;
+  let teamWickets = 0;
+
+  const pairKey = (x: string, y: string) => [x, y].filter(Boolean).sort().join("|");
+
+  const flush = (endedWicket: number | null) => {
+    if (!a && !b && runs === 0 && balls === 0) return;
+    out.push({
+      batterAId: a,
+      batterBId: b,
+      batterAName: name(a),
+      batterBName: name(b),
+      runs,
+      balls,
+      endedWicket,
+    });
+    runs = 0;
+    balls = 0;
+  };
+
+  for (const d of sorted) {
+    const sa = d.striker_id ?? a;
+    const sb = d.non_striker_id ?? b;
+    if (a && b && pairKey(sa, sb) !== pairKey(a, b) && (runs > 0 || balls > 0)) {
+      flush(null);
+    }
+    a = sa;
+    b = sb;
+
+    runs += totalRunsOnDelivery(d);
+    if (d.counts_as_legal_delivery) balls += 1;
+
+    if (d.is_wicket) {
+      if (wicketIncreasesCount(true, d.dismissal)) teamWickets += 1;
+      const ended = wicketIncreasesCount(true, d.dismissal) ? teamWickets : null;
+      const outId = d.dismissed_batsman_id ?? sa;
+      flush(ended);
+      const remain = outId === sa ? sb : sa;
+      a = d.incoming_striker_id ?? remain;
+      b = remain;
+      if (a === b) a = d.incoming_striker_id ?? a;
+    }
+  }
+
+  if (a || b || runs > 0 || balls > 0) flush(null);
+  return out;
+}
+
 export function computeInningsScorecard(params: {
   deliveries: DbDelivery[];
   battingSide: TeamSide;
@@ -390,6 +464,7 @@ export function computeInningsScorecard(params: {
     bowling: computeBowling(dels, bowlingSide, players, name),
     fallOfWickets: computeFallOfWickets(dels, name),
     extras: computeExtras(dels),
+    partnerships: computePartnerships(dels, name),
   };
 }
 
@@ -406,5 +481,16 @@ export function formatFallOfWickets(fow: FallOfWicket[]): string {
   if (fow.length === 0) return "—";
   return fow
     .map((w) => `${w.score}-${w.wicket} (${w.batsmanName}, ${w.over} ov)`)
+    .join(" · ");
+}
+
+export function formatPartnerships(partnerships: Partnership[]): string {
+  if (partnerships.length === 0) return "—";
+  return partnerships
+    .map((p) => {
+      const pair = [p.batterAName, p.batterBName].filter((n) => n && n !== "—").join(" & ");
+      const end = p.endedWicket != null ? ` · ${p.endedWicket} wkt` : " · unbroken";
+      return `${pair} ${p.runs} (${p.balls})${end}`;
+    })
     .join(" · ");
 }
