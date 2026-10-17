@@ -9,10 +9,11 @@ import {
   describeDraftOps,
   dismissalCreasePropagation,
   diffMatchScorecards,
+  findInningsContinuityIssues,
   replayDraftOps,
   validateDeliveryEdit,
   validateDraftLogs,
-  validateSwap,
+  validateReplace,
   type ApplyMatchEditPayload,
   type DiffRow,
   type DraftOp,
@@ -28,7 +29,7 @@ import {
 } from "@/lib/recompute";
 import type { SerialBundle } from "@/lib/scorecard-text";
 import type { DbDelivery, DismissalType, TeamSide } from "@/lib/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   bundle: SerialBundle;
@@ -92,12 +93,14 @@ export default function MatchEditMode({
   const [ops, setOps] = useState<DraftOp[]>([]);
   const [editing, setEditing] = useState<DbDelivery | null>(null);
   const [form, setForm] = useState<DeliveryEditInput | null>(null);
-  const [swapping, setSwapping] = useState<DbDelivery | null>(null);
-  const [swapA, setSwapA] = useState("");
-  const [swapB, setSwapB] = useState("");
+  const [replacing, setReplacing] = useState<DbDelivery | null>(null);
+  const [replaceFrom, setReplaceFrom] = useState("");
+  const [replaceTo, setReplaceTo] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [propagateDismissed, setPropagateDismissed] = useState(true);
+  const [recheckNote, setRecheckNote] = useState<string | null>(null);
+  const recheckRef = useRef<HTMLElement | null>(null);
 
   const dirty = ops.length > 0;
   const sideName = (side: TeamSide) =>
@@ -194,24 +197,31 @@ export default function MatchEditMode({
     closeEditor();
   }
 
-  function openSwap(d: DbDelivery) {
+  function openReplace(d: DbDelivery) {
     setSheetError(null);
-    setSwapping(d);
-    setSwapA(d.striker_id ?? "");
-    setSwapB(d.non_striker_id ?? "");
+    setReplacing(d);
+    const leaving = d.is_wicket
+      ? (d.dismissed_batsman_id ?? d.non_striker_id ?? d.striker_id ?? "")
+      : (d.striker_id ?? "");
+    const stay =
+      leaving === d.striker_id
+        ? (d.non_striker_id ?? "")
+        : (d.striker_id ?? "");
+    setReplaceFrom(leaving);
+    setReplaceTo(stay);
   }
 
-  function closeSwap() {
-    setSwapping(null);
-    setSwapA("");
-    setSwapB("");
+  function closeReplace() {
+    setReplacing(null);
+    setReplaceFrom("");
+    setReplaceTo("");
     setSheetError(null);
   }
 
   const editorInn = editing
     ? innings.find((i) => i.id === editing.innings_id)
-    : swapping
-      ? innings.find((i) => i.id === swapping.innings_id)
+    : replacing
+      ? innings.find((i) => i.id === replacing.innings_id)
       : null;
   const batSide = (editorInn?.batting_side ?? "a") as TeamSide;
   const bowlSide = opposite(batSide);
@@ -274,28 +284,33 @@ export default function MatchEditMode({
     closeEditor();
   }
 
-  function addSwapToDraft() {
-    if (!swapping || !editorInn) return;
-    const swapErr = validateSwap({
-      delivery: swapping,
-      a: swapA,
-      b: swapB,
-      battingSide: batSide,
+  function addReplaceToDraft(next: {
+    delivery: DbDelivery;
+    fromId: string;
+    toId: string;
+  }) {
+    const inn = innings.find((i) => i.id === next.delivery.innings_id);
+    if (!inn) return false;
+    const replaceErr = validateReplace({
+      delivery: next.delivery,
+      fromId: next.fromId,
+      toId: next.toId,
+      battingSide: inn.batting_side as TeamSide,
       players,
     });
-    if (swapErr) {
-      setSheetError(swapErr);
-      return;
+    if (replaceErr) {
+      setSheetError(replaceErr);
+      return false;
     }
     const nextOps: DraftOp[] = [
       ...ops,
       {
-        kind: "swap",
-        deliveryId: swapping.id,
-        inningsId: swapping.innings_id,
-        fromDisplayOrder: swapping.display_order,
-        a: swapA,
-        b: swapB,
+        kind: "replace",
+        deliveryId: next.delivery.id,
+        inningsId: next.delivery.innings_id,
+        fromDisplayOrder: next.delivery.display_order,
+        fromId: next.fromId,
+        toId: next.toId,
       },
     ];
     const nextDraft = replayDraftOps(deliveriesByInningsId, nextOps);
@@ -306,10 +321,12 @@ export default function MatchEditMode({
     });
     if (logErr) {
       setSheetError(logErr);
-      return;
+      return false;
     }
     setOps(nextOps);
-    closeSwap();
+    closeReplace();
+    closeEditor();
+    return true;
   }
 
   function requestClose() {
@@ -323,7 +340,7 @@ export default function MatchEditMode({
     setOps([]);
     setPreviewOpen(false);
     closeEditor();
-    closeSwap();
+    closeReplace();
   }
 
   async function applyDraft() {
@@ -348,6 +365,30 @@ export default function MatchEditMode({
   const whoOutPropagation =
     editing && form ? dismissalCreasePropagation(editing, form) : null;
 
+  const continuityIssues = useMemo(
+    () =>
+      findInningsContinuityIssues({
+        innings,
+        deliveriesByInningsId: draftDels,
+        name: pName,
+      }),
+    [innings, draftDels, players],
+  );
+
+  function runRecheck() {
+    const n = findInningsContinuityIssues({
+      innings,
+      deliveriesByInningsId: draftDels,
+      name: pName,
+    }).length;
+    setRecheckNote(
+      n === 0
+        ? "No retired or out batter is still batting later."
+        : `${n} later-ball problem${n === 1 ? "" : "s"} found.`,
+    );
+    recheckRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <div className={`phone-shell${dirty ? " has-edit-dock" : ""}`}>
       <header className="top-bar no-print">
@@ -369,6 +410,61 @@ export default function MatchEditMode({
           Draft · {opSummary}
         </p>
       )}
+
+      <section
+        ref={recheckRef}
+        className="glass edit-recheck no-print"
+        aria-label="Re-check innings"
+      >
+        <div className="edit-recheck-head">
+          <h2>Re-check innings</h2>
+          <button
+            type="button"
+            className="hud-btn"
+            disabled={busy}
+            onClick={runRecheck}
+          >
+            Re-check innings
+          </button>
+        </div>
+        {recheckNote && (
+          <p className="edit-recheck-note" role="status">
+            {recheckNote}
+          </p>
+        )}
+        {continuityIssues.length === 0 ? (
+          <p className="text-xs opacity-70">
+            Flags later balls where a batter is still batting after retiring or
+            being out.
+          </p>
+        ) : (
+          <ul className="edit-recheck-list">
+            {continuityIssues.map((issue) => (
+              <li key={`${issue.sourceDeliveryId}-${issue.removeId}`}>
+                <p>{issue.detail}</p>
+                <button
+                  type="button"
+                  className="hud-btn primary"
+                  disabled={busy}
+                  onClick={() => {
+                    const start = draftDels[issue.inningsId]?.find(
+                      (d) => d.id === issue.fromDeliveryId,
+                    );
+                    if (!start) return;
+                    addReplaceToDraft({
+                      delivery: start,
+                      fromId: issue.removeId,
+                      toId: issue.stayId,
+                    });
+                  }}
+                >
+                  {issue.fixLabel}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {resultText && (
         <p className={`chase-bar${dirty ? " ok" : " ok"}`} style={{ margin: 0 }}>
@@ -792,18 +888,37 @@ export default function MatchEditMode({
               </label>
             )}
 
-            <button
-              type="button"
-              className="edit-swap-btn"
-              disabled={busy}
-              onClick={() => {
-                const d = editing;
-                closeEditor();
-                if (d) openSwap(d);
-              }}
-            >
-              Swap batters from this ball onward
-            </button>
+            <div className="edit-crease-actions">
+              <button
+                type="button"
+                className="hud-btn"
+                disabled={busy || !form.strikerId || !form.nonStrikerId}
+                onClick={() =>
+                  setForm((f) =>
+                    f
+                      ? {
+                          ...f,
+                          strikerId: f.nonStrikerId,
+                          nonStrikerId: f.strikerId,
+                        }
+                      : f,
+                  )
+                }
+              >
+                Swap striker / non-striker
+              </button>
+              <button
+                type="button"
+                className="hud-btn"
+                disabled={busy}
+                onClick={() => {
+                  const d = editing;
+                  if (d) openReplace(d);
+                }}
+              >
+                Replace batter from this ball onward
+              </button>
+            </div>
 
             <div className="flex gap-2 pt-2">
               <button
@@ -833,12 +948,12 @@ export default function MatchEditMode({
       </HudModal>
 
       <HudModal
-        open={!!swapping}
-        title="Swap batters"
-        onBackdropClick={closeSwap}
-        onEscape={closeSwap}
+        open={!!replacing}
+        title="Replace batter from this ball onward"
+        onBackdropClick={closeReplace}
+        onEscape={closeReplace}
       >
-        {swapping && (
+        {replacing && (
           <PickerGroup>
             {sheetError ? (
               <div className="error-banner mb-3" role="alert">
@@ -846,37 +961,49 @@ export default function MatchEditMode({
               </div>
             ) : null}
             <p className="mb-3 text-sm opacity-80">
-              From this ball onward, swap these two names wherever they appear
-              as striker, non-striker, dismissed, or incoming. Earlier balls
-              stay as they were.
+              Replace one batter with another on the crease (striker and
+              non-striker) from this ball through the rest of the innings.
+              Retired not out and batters already at the crease are allowed.
             </p>
             <PickerField
-              label="First batter"
-              value={swapA}
-              onChange={setSwapA}
+              label="Batter to replace"
+              value={replaceFrom}
+              onChange={setReplaceFrom}
               options={batsmen.map((p) => ({ id: p.id, label: p.display_name }))}
               required
               disabled={busy}
             />
             <PickerField
-              label="Second batter"
-              value={swapB}
-              onChange={setSwapB}
+              label="Replacement"
+              value={replaceTo}
+              onChange={setReplaceTo}
               options={batsmen.map((p) => ({ id: p.id, label: p.display_name }))}
               required
               disabled={busy}
             />
             <div className="flex gap-2 pt-2">
-              <button type="button" className="hud-btn flex-1" onClick={closeSwap}>
+              <button
+                type="button"
+                className="hud-btn flex-1"
+                onClick={closeReplace}
+              >
                 Cancel
               </button>
               <button
                 type="button"
                 className="hud-btn primary flex-1 disabled:opacity-40"
-                disabled={busy || !swapA || !swapB || swapA === swapB}
-                onClick={addSwapToDraft}
+                disabled={
+                  busy || !replaceFrom || !replaceTo || replaceFrom === replaceTo
+                }
+                onClick={() =>
+                  addReplaceToDraft({
+                    delivery: replacing,
+                    fromId: replaceFrom,
+                    toId: replaceTo,
+                  })
+                }
               >
-                Add swap to draft
+                Add replace to draft
               </button>
             </div>
           </PickerGroup>

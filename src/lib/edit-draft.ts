@@ -81,7 +81,31 @@ export type DraftSwapOp = {
   b: string;
 };
 
-export type DraftOp = DraftBallOp | DraftSwapOp;
+export type DraftReplaceOp = {
+  kind: "replace";
+  deliveryId: string;
+  inningsId: string;
+  fromDisplayOrder: number;
+  fromId: string;
+  toId: string;
+};
+
+export type DraftOp = DraftBallOp | DraftSwapOp | DraftReplaceOp;
+
+export type InningsContinuityIssue = {
+  inningsId: string;
+  inningsIndex: number;
+  sourceDeliveryId: string;
+  sourceLabel: string;
+  fromDeliveryId: string;
+  fromLabel: string;
+  fromDisplayOrder: number;
+  removeId: string;
+  stayId: string;
+  reason: "retired" | "out";
+  detail: string;
+  fixLabel: string;
+};
 
 export type ApplyMatchEditPayload = {
   expectedUpdatedAt: string;
@@ -155,6 +179,16 @@ export function replayDraftOps(
         }
       }
       next[op.inningsId] = updated;
+    } else if (op.kind === "replace") {
+      const start = list.find((d) => d.id === op.deliveryId);
+      next[op.inningsId] = replaceCreaseBatterFromDelivery(
+        list,
+        op.fromDisplayOrder,
+        op.fromId,
+        op.toId,
+        incomingForReplace(list, op.fromId, op.fromDisplayOrder) ??
+          start?.incoming_striker_id,
+      );
     } else {
       next[op.inningsId] = swapBattersFromDelivery(
         list,
@@ -306,6 +340,119 @@ export function validateDeliveryEdit(params: {
   }
 
   return null;
+}
+
+function incomingForReplace(
+  deliveries: DbDelivery[],
+  leavingId: string,
+  fromDisplayOrder: number,
+): string | null {
+  const prior = [...deliveries]
+    .filter((d) => d.display_order <= fromDisplayOrder)
+    .sort((a, b) => b.display_order - a.display_order);
+  for (const d of prior) {
+    if (!d.is_wicket) continue;
+    const outId = dismissedIdFromDelivery(d);
+    if (outId === leavingId && d.incoming_striker_id) {
+      return d.incoming_striker_id;
+    }
+  }
+  return null;
+}
+
+export function validateReplace(params: {
+  delivery: DbDelivery;
+  fromId: string;
+  toId: string;
+  battingSide: TeamSide;
+  players: DbPlayer[];
+}): string | null {
+  const { delivery, fromId, toId, battingSide, players } = params;
+  if (isSpecialDelivery(delivery)) {
+    return "Cannot replace on strike-swap or crease-replace rows";
+  }
+  if (!fromId || !toId) return "Choose who to replace and who comes in";
+  if (fromId === toId) return "Replacement must be a different batter";
+  if (!playerOnSide(players, fromId, battingSide)) {
+    return "Both players must be on the batting team";
+  }
+  if (!playerOnSide(players, toId, battingSide)) {
+    return "Both players must be on the batting team";
+  }
+  return null;
+}
+
+export function findInningsContinuityIssues(params: {
+  innings: DbInnings[];
+  deliveriesByInningsId: Record<string, DbDelivery[]>;
+  name: (id: string | null | undefined) => string;
+}): InningsContinuityIssue[] {
+  const issues: InningsContinuityIssue[] = [];
+  for (const inn of [...params.innings].sort((a, b) => a.index_num - b.index_num)) {
+    const sorted = [...(params.deliveriesByInningsId[inn.id] ?? [])].sort(
+      (a, b) => a.display_order - b.display_order,
+    );
+    type Left = {
+      stayId: string;
+      source: DbDelivery;
+      reason: "retired" | "out";
+    };
+    const left = new Map<string, Left>();
+    const seen = new Set<string>();
+
+    for (const d of sorted) {
+      if (isSpecialDelivery(d)) continue;
+      const crease = [d.striker_id, d.non_striker_id].filter(Boolean) as string[];
+      for (const id of crease) {
+        const rec = left.get(id);
+        if (!rec) continue;
+        const key = `${rec.source.id}:${id}`;
+        if (seen.has(key)) continue;
+        const later = sorted.find(
+          (x) =>
+            x.display_order > rec.source.display_order &&
+            !isSpecialDelivery(x),
+        );
+        if (!later || !rec.stayId) continue;
+        seen.add(key);
+        const sourceLabel = ballLabelForDelivery(sorted, rec.source.id);
+        const fromLabel = ballLabelForDelivery(sorted, later.id);
+        const who = params.name(id);
+        const stay = params.name(rec.stayId);
+        const kind = rec.reason === "retired" ? "retired" : "out";
+        issues.push({
+          inningsId: inn.id,
+          inningsIndex: inn.index_num,
+          sourceDeliveryId: rec.source.id,
+          sourceLabel,
+          fromDeliveryId: later.id,
+          fromLabel,
+          fromDisplayOrder: later.display_order,
+          removeId: id,
+          stayId: rec.stayId,
+          reason: rec.reason,
+          detail: `${who} is still batting after ${sourceLabel} (${kind}).`,
+          fixLabel: `Fix: replace ${who} with ${stay} from ${fromLabel}`,
+        });
+      }
+
+      if (!d.is_wicket) continue;
+      const outId = dismissedIdFromDelivery(d);
+      if (!outId) continue;
+      const stayId =
+        d.striker_id === outId
+          ? (d.non_striker_id ?? "")
+          : d.non_striker_id === outId
+            ? (d.striker_id ?? "")
+            : (d.striker_id ?? d.non_striker_id ?? "");
+      left.set(outId, {
+        stayId: stayId && stayId !== outId ? stayId : d.incoming_striker_id ?? "",
+        source: d,
+        reason: d.dismissal === "retired_hurt" ? "retired" : "out",
+      });
+    }
+  }
+  return issues;
 }
 
 export function validateSwap(params: {
@@ -690,6 +837,10 @@ export function describeDraftOps(
         }
       }
       operations.push({ summary });
+    } else if (op.kind === "replace") {
+      operations.push({
+        summary: `${label}  replace ${name(op.fromId)} → ${name(op.toId)} from here onward`,
+      });
     } else {
       operations.push({
         summary: `${label}  swap ${name(op.a)} ↔ ${name(op.b)} from here onward`,
@@ -700,8 +851,10 @@ export function describeDraftOps(
 
   const balls = ops.filter((o) => o.kind === "ball").length;
   const swaps = ops.filter((o) => o.kind === "swap").length;
+  const replaces = ops.filter((o) => o.kind === "replace").length;
   const parts: string[] = [];
   if (balls) parts.push(`${balls} ball edit${balls === 1 ? "" : "s"}`);
+  if (replaces) parts.push(`${replaces} batter replace${replaces === 1 ? "" : "s"}`);
   if (swaps) parts.push(`${swaps} batter swap${swaps === 1 ? "" : "s"}`);
 
   return {
@@ -795,6 +948,16 @@ export function parseDraftOps(raw: unknown): DraftOp[] {
             ? String(input.fielderAssistId)
             : null,
         } as DeliveryEditInput,
+      };
+    }
+    if (kind === "replace") {
+      return {
+        kind: "replace",
+        deliveryId,
+        inningsId,
+        fromDisplayOrder: Number(row.fromDisplayOrder) || 0,
+        fromId: String(row.fromId ?? ""),
+        toId: String(row.toId ?? ""),
       };
     }
     if (kind === "swap") {

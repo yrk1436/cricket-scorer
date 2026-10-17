@@ -26,6 +26,7 @@ import {
   StaleMatchEditError,
   validateDeliveryEdit,
   validateDraftLogs,
+  validateReplace,
   validateSwap,
   type ApplyMatchEditPayload,
   type DraftOp,
@@ -1888,6 +1889,15 @@ function replayAndValidateDraft(
       const err = validateDeliveryEdit({
         delivery: del,
         input: op.input,
+        battingSide,
+        players: bundle.players,
+      });
+      if (err) throw new Error(err);
+    } else if (op.kind === "replace") {
+      const err = validateReplace({
+        delivery: del,
+        fromId: op.fromId,
+        toId: op.toId,
         battingSide,
         players: bundle.players,
       });

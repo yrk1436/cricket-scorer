@@ -8,11 +8,13 @@ import {
   describeDraftOps,
   dismissalCreasePropagation,
   diffMatchScorecards,
+  findInningsContinuityIssues,
   replayDraftOps,
   StaleMatchEditError,
   validateDeliveryEdit,
   validateDraftLogs,
   validateInningsLog,
+  validateReplace,
   validateSwap,
   type DraftOp,
 } from "./edit-draft";
@@ -772,5 +774,122 @@ describe("dismissal crease propagation", () => {
         players: makePlayers(),
       }),
     ).toBeNull();
+  });
+});
+
+describe("replace batter from this ball onward", () => {
+  const savedRetirement = [
+    makeDelivery({
+      id: "d-ret",
+      display_order: 1,
+      striker_id: "bat-1",
+      non_striker_id: "bat-2",
+      bowler_id: null,
+      runs_off_bat: 0,
+      counts_as_legal_delivery: false,
+      is_wicket: true,
+      dismissal: "retired_hurt",
+      dismissed_batsman_id: "bat-2",
+      incoming_striker_id: "bat-3",
+    }),
+    makeDelivery({
+      id: "d-7-1",
+      display_order: 2,
+      striker_id: "bat-1",
+      non_striker_id: "bat-3",
+      runs_off_bat: 1,
+    }),
+    makeDelivery({
+      id: "d-7-2",
+      display_order: 3,
+      striker_id: "bat-2",
+      non_striker_id: "bat-3",
+      runs_off_bat: 2,
+    }),
+  ];
+
+  it("replaces the batter on this and later creases only", () => {
+    const draft = replayDraftOps(
+      { "inn-1": savedRetirement },
+      [
+        {
+          kind: "replace",
+          deliveryId: "d-7-1",
+          inningsId: "inn-1",
+          fromDisplayOrder: 2,
+          fromId: "bat-2",
+          toId: "bat-1",
+        },
+      ],
+    )["inn-1"];
+    expect(draft[0].non_striker_id).toBe("bat-2");
+    expect(draft[0].dismissed_batsman_id).toBe("bat-2");
+    expect(draft[1].striker_id).toBe("bat-1");
+    expect(draft[2].striker_id).toBe("bat-1");
+    expect(draft[2].non_striker_id).toBe("bat-3");
+  });
+
+  it("allows replacing with a crease batter or retired-not-out batter", () => {
+    expect(
+      validateReplace({
+        delivery: savedRetirement[1],
+        fromId: "bat-2",
+        toId: "bat-1",
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toBeNull();
+  });
+
+  it("re-check flags a retired batter still batting and the fix clears it", () => {
+    const issues = findInningsContinuityIssues({
+      innings: [inningsRow()],
+      deliveriesByInningsId: { "inn-1": savedRetirement },
+      name: nameOf,
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0].removeId).toBe("bat-2");
+    expect(issues[0].stayId).toBe("bat-1");
+    expect(issues[0].fromLabel).toBe("0.1");
+    expect(issues[0].fixLabel).toMatch(/replace Raj with Ali from 0.1/);
+
+    const fixed = replayDraftOps(
+      { "inn-1": savedRetirement },
+      [
+        {
+          kind: "replace",
+          deliveryId: issues[0].fromDeliveryId,
+          inningsId: "inn-1",
+          fromDisplayOrder: issues[0].fromDisplayOrder,
+          fromId: issues[0].removeId,
+          toId: issues[0].stayId,
+        },
+      ],
+    );
+    expect(
+      findInningsContinuityIssues({
+        innings: [inningsRow()],
+        deliveriesByInningsId: fixed,
+        name: nameOf,
+      }),
+    ).toHaveLength(0);
+  });
+
+  it("does not two-way swap: the replacement stays on later balls", () => {
+    const draft = replayDraftOps(
+      { "inn-1": savedRetirement },
+      [
+        {
+          kind: "replace",
+          deliveryId: "d-7-1",
+          inningsId: "inn-1",
+          fromDisplayOrder: 2,
+          fromId: "bat-2",
+          toId: "bat-1",
+        },
+      ],
+    )["inn-1"];
+    expect(draft[1].striker_id).toBe("bat-1");
+    expect(draft[1].non_striker_id).toBe("bat-3");
   });
 });
