@@ -46,10 +46,14 @@ export type MatchEditChange = {
 export type MatchEditLogEntry = {
   at: string;
   actor: string;
-  deliveryId: string;
-  inningsIndex: number;
-  ballLabel: string;
+  deliveryId?: string;
+  inningsIndex?: number;
+  ballLabel?: string;
   changes: MatchEditChange[];
+  /** Phase 2 Apply writes one session line; Phase 1 rows are kind "ball" or omitted. */
+  kind?: "ball" | "session";
+  summary?: string;
+  operations?: { summary: string }[];
 };
 
 export type DbPlayer = {

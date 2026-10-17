@@ -3,9 +3,23 @@
 import HudModal from "@/components/HudModal";
 import PickerField, { PickerGroup } from "@/components/scorer/PickerField";
 import { DISMISSAL_OPTIONS } from "@/lib/delivery-presets";
+import {
+  buildApplyPayload,
+  changedDeliveries,
+  describeDraftOps,
+  diffMatchScorecards,
+  replayDraftOps,
+  validateDeliveryEdit,
+  validateDraftLogs,
+  validateSwap,
+  type ApplyMatchEditPayload,
+  type DiffRow,
+  type DraftOp,
+} from "@/lib/edit-draft";
 import { ballsToOvers, opposite, totalRunsOnDelivery } from "@/lib/game";
 import {
   deliveryEditFromRow,
+  derivedMatchState,
   groupDeliveriesByOver,
   isRetirementDismissal,
   type DeliveryEditInput,
@@ -13,14 +27,14 @@ import {
 } from "@/lib/recompute";
 import type { SerialBundle } from "@/lib/scorecard-text";
 import type { DbDelivery, DismissalType, TeamSide } from "@/lib/types";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Props = {
   bundle: SerialBundle;
   busy?: boolean;
   error?: string | null;
   onClose: () => void;
-  onSave: (deliveryId: string, input: DeliveryEditInput) => Promise<boolean>;
+  onApply: (payload: ApplyMatchEditPayload) => Promise<boolean>;
 };
 
 function extraShort(d: DbDelivery): string {
@@ -40,21 +54,101 @@ function wicketShort(d: DbDelivery): string {
   return d.dismissal === "none" ? "out" : d.dismissal.replace("_", " ");
 }
 
+function changeWord(n: number): string {
+  return `${n} unsaved change${n === 1 ? "" : "s"}`;
+}
+
+function DiffLines({ rows, onlyChanged }: { rows: DiffRow[]; onlyChanged?: boolean }) {
+  const shown = onlyChanged ? rows.filter((r) => r.changed) : rows;
+  if (shown.length === 0) return null;
+  return (
+    <ul className="edit-diff-list">
+      {shown.map((row) => (
+        <li
+          key={row.key}
+          className={`edit-diff-row${row.changed ? " changed" : ""}`}
+        >
+          <span className="edit-diff-label">{row.label}</span>
+          <span className="edit-diff-values">
+            <span className="edit-diff-from">{row.before}</span>
+            <span aria-hidden="true"> → </span>
+            <span className="edit-diff-to">{row.after}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function MatchEditMode({
   bundle,
   busy,
   error,
   onClose,
-  onSave,
+  onApply,
 }: Props) {
   const { match, players, innings, deliveriesByInningsId } = bundle;
+  const [ops, setOps] = useState<DraftOp[]>([]);
   const [editing, setEditing] = useState<DbDelivery | null>(null);
   const [form, setForm] = useState<DeliveryEditInput | null>(null);
+  const [swapping, setSwapping] = useState<DbDelivery | null>(null);
+  const [swapA, setSwapA] = useState("");
+  const [swapB, setSwapB] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [sheetError, setSheetError] = useState<string | null>(null);
 
+  const dirty = ops.length > 0;
   const sideName = (side: TeamSide) =>
     side === "a" ? match.team_a_name : match.team_b_name;
   const pName = (id: string | null | undefined) =>
     players.find((p) => p.id === id)?.display_name ?? "—";
+
+  const draftDels = useMemo(
+    () => replayDraftOps(deliveriesByInningsId, ops),
+    [deliveriesByInningsId, ops],
+  );
+
+  const changedIds = useMemo(() => {
+    return new Set(
+      changedDeliveries(deliveriesByInningsId, draftDels).map((d) => d.id),
+    );
+  }, [deliveriesByInningsId, draftDels]);
+
+  const derived = useMemo(
+    () =>
+      derivedMatchState({
+        teamAName: match.team_a_name,
+        teamBName: match.team_b_name,
+        inningsCount: match.innings_count,
+        players,
+        innings,
+        deliveriesByInningsId: draftDels,
+        maxBallsPerOver: match.max_balls_per_over ?? 0,
+      }),
+    [match, players, innings, draftDels],
+  );
+
+  const diff = useMemo(
+    () =>
+      dirty
+        ? diffMatchScorecards({
+            teamAName: match.team_a_name,
+            teamBName: match.team_b_name,
+            inningsCount: match.innings_count,
+            players,
+            innings,
+            savedDeliveries: deliveriesByInningsId,
+            draftDeliveries: draftDels,
+            maxBallsPerOver: match.max_balls_per_over ?? 0,
+          })
+        : null,
+    [dirty, match, players, innings, deliveriesByInningsId, draftDels],
+  );
+
+  const opSummary = useMemo(
+    () => describeDraftOps(deliveriesByInningsId, ops, pName).summary,
+    [deliveriesByInningsId, ops, players],
+  );
 
   const sortedInns = useMemo(
     () => [...innings].sort((a, b) => a.index_num - b.index_num),
@@ -63,7 +157,18 @@ export default function MatchEditMode({
 
   const history = match.edit_history ?? [];
 
+  useEffect(() => {
+    if (!dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [dirty]);
+
   function openBall(d: DbDelivery) {
+    setSheetError(null);
     setEditing(d);
     setForm(deliveryEditFromRow(d));
   }
@@ -71,11 +176,39 @@ export default function MatchEditMode({
   function closeEditor() {
     setEditing(null);
     setForm(null);
+    setSheetError(null);
+  }
+
+  function requestCloseEditor() {
+    if (
+      form &&
+      editing &&
+      JSON.stringify(form) !== JSON.stringify(deliveryEditFromRow(editing))
+    ) {
+      return;
+    }
+    closeEditor();
+  }
+
+  function openSwap(d: DbDelivery) {
+    setSheetError(null);
+    setSwapping(d);
+    setSwapA(d.striker_id ?? "");
+    setSwapB(d.non_striker_id ?? "");
+  }
+
+  function closeSwap() {
+    setSwapping(null);
+    setSwapA("");
+    setSwapB("");
+    setSheetError(null);
   }
 
   const editorInn = editing
     ? innings.find((i) => i.id === editing.innings_id)
-    : null;
+    : swapping
+      ? innings.find((i) => i.id === swapping.innings_id)
+      : null;
   const batSide = (editorInn?.batting_side ?? "a") as TeamSide;
   const bowlSide = opposite(batSide);
   const batsmen = players.filter((p) => p.side === batSide && !p.did_not_bat);
@@ -100,42 +233,185 @@ export default function MatchEditMode({
     )
     .map((p) => ({ id: p.id, label: p.display_name }));
 
-  async function save() {
-    if (!editing || !form) return;
-    const ok = await onSave(editing.id, form);
-    if (ok) closeEditor();
+  function addBallToDraft() {
+    if (!editing || !form || !editorInn) return;
+    const inputErr = validateDeliveryEdit({
+      delivery: editing,
+      input: form,
+      battingSide: batSide,
+      players,
+    });
+    if (inputErr) {
+      setSheetError(inputErr);
+      return;
+    }
+    const nextOps: DraftOp[] = [
+      ...ops,
+      {
+        kind: "ball",
+        deliveryId: editing.id,
+        inningsId: editing.innings_id,
+        input: form,
+      },
+    ];
+    const nextDraft = replayDraftOps(deliveriesByInningsId, nextOps);
+    const logErr = validateDraftLogs({
+      innings,
+      players,
+      deliveriesByInningsId: nextDraft,
+    });
+    if (logErr) {
+      setSheetError(logErr);
+      return;
+    }
+    setOps(nextOps);
+    closeEditor();
   }
+
+  function addSwapToDraft() {
+    if (!swapping || !editorInn) return;
+    const swapErr = validateSwap({
+      delivery: swapping,
+      a: swapA,
+      b: swapB,
+      battingSide: batSide,
+      players,
+    });
+    if (swapErr) {
+      setSheetError(swapErr);
+      return;
+    }
+    const nextOps: DraftOp[] = [
+      ...ops,
+      {
+        kind: "swap",
+        deliveryId: swapping.id,
+        inningsId: swapping.innings_id,
+        fromDisplayOrder: swapping.display_order,
+        a: swapA,
+        b: swapB,
+      },
+    ];
+    const nextDraft = replayDraftOps(deliveriesByInningsId, nextOps);
+    const logErr = validateDraftLogs({
+      innings,
+      players,
+      deliveriesByInningsId: nextDraft,
+    });
+    if (logErr) {
+      setSheetError(logErr);
+      return;
+    }
+    setOps(nextOps);
+    closeSwap();
+  }
+
+  function requestClose() {
+    if (dirty && !window.confirm(`Discard ${changeWord(ops.length)}?`)) return;
+    onClose();
+  }
+
+  function discardDraft() {
+    if (!dirty) return;
+    if (!window.confirm(`Throw away ${changeWord(ops.length)}?`)) return;
+    setOps([]);
+    setPreviewOpen(false);
+    closeEditor();
+    closeSwap();
+  }
+
+  async function applyDraft() {
+    if (!dirty || busy) return;
+    const ok = await onApply(
+      buildApplyPayload({
+        expectedUpdatedAt: match.updated_at,
+        deliveriesByInningsId,
+        operations: ops,
+      }),
+    );
+    if (ok) {
+      setOps([]);
+      setPreviewOpen(false);
+    }
+  }
+
+  const resultText = dirty
+    ? derived.result.summary
+    : match.result_summary;
 
   return (
     <div className="phone-shell">
       <header className="top-bar no-print">
         <div>
           <h1>Edit match</h1>
-          <p className="sub">Correct a ball · no insert or delete</p>
+          <p className="sub">
+            {match.team_a_name} vs {match.team_b_name}
+          </p>
         </div>
-        <button type="button" className="hud-btn" onClick={onClose}>
+        <button type="button" className="hud-btn" onClick={requestClose}>
           Done
         </button>
       </header>
 
       {error && <div className="error-banner no-print">{error}</div>}
 
-      {match.result_summary && (
-        <p className="chase-bar ok" style={{ margin: 0 }}>
-          {match.result_summary}
+      {dirty && (
+        <div className="edit-draft-banner no-print" role="region" aria-label="Unsaved draft">
+          <p className="edit-draft-count" aria-live="polite">
+            {changeWord(ops.length)}
+            <span className="edit-draft-ops"> · {opSummary}</span>
+          </p>
+          <div className="edit-draft-actions">
+            <button
+              type="button"
+              className="hud-btn"
+              disabled={busy}
+              onClick={() => setPreviewOpen(true)}
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              className="hud-btn primary"
+              disabled={busy}
+              onClick={() => void applyDraft()}
+            >
+              {busy ? "Saving…" : "Apply"}
+            </button>
+            <button
+              type="button"
+              className="hud-btn danger"
+              disabled={busy}
+              onClick={discardDraft}
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {resultText && (
+        <p className={`chase-bar${dirty ? " ok" : " ok"}`} style={{ margin: 0 }}>
+          {resultText}
+          {dirty ? " · draft" : ""}
         </p>
       )}
 
       {sortedInns.map((inn) => {
-        const dels = deliveriesByInningsId[inn.id] ?? [];
+        const dels = draftDels[inn.id] ?? [];
         const groups = groupDeliveriesByOver(dels);
+        const derivedInn = derived.innings.find((d) => d.id === inn.id);
+        const runs = derivedInn?.runs ?? inn.runs;
+        const wickets = derivedInn?.wickets ?? inn.wickets;
+        const balls = derivedInn?.balls_legal ?? inn.balls_legal;
         return (
           <section key={inn.id} className="glass edit-innings">
             <h2 className="edit-innings-title">
               Innings {inn.index_num} · {sideName(inn.batting_side as TeamSide)}
               <span>
                 {" "}
-                {inn.runs}/{inn.wickets} ({ballsToOvers(inn.balls_legal)})
+                {runs}/{wickets} ({ballsToOvers(balls)})
+                {dirty ? " · draft" : ""}
               </span>
             </h2>
             {groups.length === 0 ? (
@@ -148,11 +424,12 @@ export default function MatchEditMode({
                     {g.balls.map((row) => {
                       const d = row.delivery;
                       const wkt = wicketShort(d);
+                      const changed = changedIds.has(d.id);
                       return (
-                        <li key={d.id}>
+                        <li key={d.id} className="edit-ball-item">
                           <button
                             type="button"
-                            className={`edit-ball-row${d.is_wicket ? " wicket" : ""}`}
+                            className={`edit-ball-row${d.is_wicket ? " wicket" : ""}${changed ? " changed" : ""}`}
                             disabled={!row.editable || busy}
                             aria-label={
                               row.editable
@@ -184,6 +461,21 @@ export default function MatchEditMode({
                                   : extraShort(d)}
                             </span>
                           </button>
+                          {row.editable && (
+                            <div className="edit-ball-tools">
+                              <button
+                                type="button"
+                                className="edit-swap-btn"
+                                disabled={busy}
+                                onClick={() => openSwap(d)}
+                              >
+                                Swap batters
+                              </button>
+                              {changed && (
+                                <span className="edit-changed-mark">changed</span>
+                              )}
+                            </div>
+                          )}
                         </li>
                       );
                     })}
@@ -200,16 +492,28 @@ export default function MatchEditMode({
           <summary>Edit history ({history.length})</summary>
           <ul className="edit-history">
             {[...history].reverse().map((e, i) => (
-              <li key={`${e.at}-${e.deliveryId}-${i}`}>
+              <li key={`${e.at}-${e.kind ?? "ball"}-${e.deliveryId ?? i}`}>
                 <p className="edit-history-when">
-                  {new Date(e.at).toLocaleString()} · {e.actor} · inns{" "}
-                  {e.inningsIndex} · {e.ballLabel}
+                  {new Date(e.at).toLocaleString()} · {e.actor}
+                  {e.kind === "session"
+                    ? e.summary
+                      ? ` · ${e.summary}`
+                      : ""
+                    : ` · inns ${e.inningsIndex} · ${e.ballLabel}`}
                 </p>
-                <p className="edit-history-what">
-                  {e.changes
-                    .map((c) => `${c.field}: ${c.from} → ${c.to}`)
-                    .join(" · ")}
-                </p>
+                {e.kind === "session" && e.operations?.length ? (
+                  <ul className="edit-history-ops">
+                    {e.operations.map((op, j) => (
+                      <li key={`${e.at}-op-${j}`}>{op.summary}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="edit-history-what">
+                    {e.changes
+                      .map((c) => `${c.field}: ${c.from} → ${c.to}`)
+                      .join(" · ")}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
@@ -218,19 +522,19 @@ export default function MatchEditMode({
 
       <HudModal
         open={!!editing && !!form}
-        title={editing ? `Edit ball` : "Edit ball"}
-        onBackdropClick={closeEditor}
+        title="Edit ball"
+        onBackdropClick={requestCloseEditor}
+        onEscape={requestCloseEditor}
       >
         {form && editing && (
           <PickerGroup>
-            {error ? (
+            {sheetError ? (
               <div className="error-banner mb-3" role="alert">
-                {error}
+                {sheetError}
               </div>
             ) : null}
             <p className="mb-3 text-sm opacity-80">
-              Changes apply to this ball only. Later balls keep their recorded
-              crease — “swap from here onward” comes later.
+              Added to the draft only. Nothing is saved until you tap Apply.
             </p>
             <PickerField
               label="Striker"
@@ -523,12 +827,125 @@ export default function MatchEditMode({
                   form.strikerId === form.nonStrikerId ||
                   (!retirement && !form.bowlerId)
                 }
-                onClick={() => void save()}
+                onClick={addBallToDraft}
               >
-                Save correction
+                Add to draft
               </button>
             </div>
           </PickerGroup>
+        )}
+      </HudModal>
+
+      <HudModal
+        open={!!swapping}
+        title="Swap batters"
+        onBackdropClick={closeSwap}
+        onEscape={closeSwap}
+      >
+        {swapping && (
+          <PickerGroup>
+            {sheetError ? (
+              <div className="error-banner mb-3" role="alert">
+                {sheetError}
+              </div>
+            ) : null}
+            <p className="mb-3 text-sm opacity-80">
+              From this ball onward, swap these two names wherever they appear
+              as striker, non-striker, dismissed, or incoming. Earlier balls
+              stay as they were.
+            </p>
+            <PickerField
+              label="First batter"
+              value={swapA}
+              onChange={setSwapA}
+              options={batsmen.map((p) => ({ id: p.id, label: p.display_name }))}
+              required
+              disabled={busy}
+            />
+            <PickerField
+              label="Second batter"
+              value={swapB}
+              onChange={setSwapB}
+              options={batsmen.map((p) => ({ id: p.id, label: p.display_name }))}
+              required
+              disabled={busy}
+            />
+            <div className="flex gap-2 pt-2">
+              <button type="button" className="hud-btn flex-1" onClick={closeSwap}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="hud-btn primary flex-1 disabled:opacity-40"
+                disabled={busy || !swapA || !swapB || swapA === swapB}
+                onClick={addSwapToDraft}
+              >
+                Add swap to draft
+              </button>
+            </div>
+          </PickerGroup>
+        )}
+      </HudModal>
+
+      <HudModal
+        open={previewOpen}
+        title="Saved → Draft"
+        onBackdropClick={() => setPreviewOpen(false)}
+        panelClassName="hud-sheet-tall"
+      >
+        {diff && (
+          <div className="edit-preview">
+            {!diff.hasScoreChange && (
+              <p className="mb-3 text-sm opacity-80">
+                Balls changed; team total is the same.
+              </p>
+            )}
+            <div className={`edit-diff-row${diff.result.changed ? " changed" : ""}`}>
+              <span className="edit-diff-label">Result</span>
+              <span className="edit-diff-values">
+                <span className="edit-diff-from">{diff.result.before}</span>
+                <span aria-hidden="true"> → </span>
+                <span className="edit-diff-to">{diff.result.after}</span>
+              </span>
+            </div>
+            {diff.innings.map((inn) => (
+              <section key={inn.inningsId} className="edit-preview-inn">
+                <h3>
+                  Innings {inn.index} · {inn.battingName}
+                </h3>
+                <DiffLines rows={[inn.totals]} />
+                <p className="section-title">Batting</p>
+                <DiffLines
+                  rows={inn.batting.filter((r) => r.changed || !r.before.includes("did not bat") || !r.after.includes("did not bat"))}
+                />
+                <p className="section-title">Bowling</p>
+                <DiffLines rows={inn.bowling} />
+                {inn.partnerships.some((r) => r.changed) && (
+                  <>
+                    <p className="section-title">Partnerships</p>
+                    <DiffLines rows={inn.partnerships} onlyChanged />
+                  </>
+                )}
+              </section>
+            ))}
+            <div className="flex gap-2 pt-3">
+              <button
+                type="button"
+                className="hud-btn flex-1"
+                onClick={() => setPreviewOpen(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="hud-btn primary flex-1 disabled:opacity-40"
+                disabled={busy}
+                onClick={() => void applyDraft()}
+              >
+                {busy ? "Saving…" : "Apply"}
+              </button>
+            </div>
+          </div>
         )}
       </HudModal>
     </div>

@@ -17,6 +17,20 @@ import {
 } from "@/lib/game";
 import { isEditUnlockedForMatch } from "@/lib/edit-unlock";
 import {
+  assertApplyFreshness,
+  assertSameDeliveryIdentity,
+  buildSessionHistoryEntry,
+  changedDeliveries,
+  deliveryIdsByInnings,
+  replayDraftOps,
+  StaleMatchEditError,
+  validateDeliveryEdit,
+  validateDraftLogs,
+  validateSwap,
+  type ApplyMatchEditPayload,
+  type DraftOp,
+} from "@/lib/edit-draft";
+import {
   appendEditHistory,
   applyDeliveryEdit,
   ballLabelForDelivery,
@@ -1836,6 +1850,162 @@ export async function updateDelivery(
   }
 
   return { ok: true, unchanged: false };
+}
+
+function deliveryPatch(d: DbDelivery) {
+  return {
+    id: d.id,
+    striker_id: d.striker_id,
+    non_striker_id: d.non_striker_id,
+    bowler_id: d.bowler_id,
+    runs_off_bat: d.runs_off_bat,
+    extra_wide: d.extra_wide,
+    extra_nb: d.extra_nb,
+    extra_byes: d.extra_byes,
+    extra_leg_byes: d.extra_leg_byes ?? 0,
+    counts_as_legal_delivery: d.counts_as_legal_delivery,
+    is_wicket: d.is_wicket,
+    dismissal: d.dismissal,
+    dismissed_batsman_id: d.dismissed_batsman_id ?? null,
+    incoming_striker_id: d.incoming_striker_id ?? null,
+    fielder_id: d.fielder_id ?? null,
+    fielder_assist_id: d.fielder_assist_id ?? null,
+  };
+}
+
+function replayAndValidateDraft(
+  bundle: MatchBundle,
+  ops: DraftOp[],
+): Record<string, DbDelivery[]> {
+  let current = bundle.deliveriesByInningsId;
+  for (const op of ops) {
+    const inn = bundle.innings.find((i) => i.id === op.inningsId);
+    const list = current[op.inningsId] ?? [];
+    const del = list.find((d) => d.id === op.deliveryId);
+    if (!inn || !del) throw new Error("Delivery not found");
+    const battingSide = inn.batting_side as TeamSide;
+    if (op.kind === "ball") {
+      const err = validateDeliveryEdit({
+        delivery: del,
+        input: op.input,
+        battingSide,
+        players: bundle.players,
+      });
+      if (err) throw new Error(err);
+    } else {
+      const err = validateSwap({
+        delivery: del,
+        a: op.a,
+        b: op.b,
+        battingSide,
+        players: bundle.players,
+      });
+      if (err) throw new Error(err);
+    }
+    current = replayDraftOps(current, [op]);
+  }
+
+  const logErr = validateDraftLogs({
+    innings: bundle.innings,
+    players: bundle.players,
+    deliveriesByInningsId: current,
+  });
+  if (logErr) throw new Error(logErr);
+
+  assertSameDeliveryIdentity(
+    deliveryIdsByInnings(bundle.deliveriesByInningsId),
+    deliveryIdsByInnings(current),
+  );
+
+  return current;
+}
+
+export async function applyMatchEditDraft(
+  writeToken: string,
+  payload: ApplyMatchEditPayload,
+  unlockCookie?: string,
+) {
+  const m = await getMatchByWriteToken(writeToken);
+  if (!m) throw new Error("Match not found");
+
+  if (m.status === "completed" && !isEditUnlockedForMatch(unlockCookie, m.id)) {
+    throw new Error("PIN required to edit a completed match");
+  }
+
+  if (!payload.operations.length) {
+    throw new Error("No draft changes to apply");
+  }
+
+  const bundle = await fetchBundle(m);
+  assertApplyFreshness({
+    expectedUpdatedAt: payload.expectedUpdatedAt,
+    actualUpdatedAt: m.updated_at,
+    expectedIds: payload.expectedDeliveryIdsByInningsId,
+    actualIds: deliveryIdsByInnings(bundle.deliveriesByInningsId),
+  });
+
+  const draft = replayAndValidateDraft(bundle, payload.operations);
+  const patches = changedDeliveries(bundle.deliveriesByInningsId, draft);
+  const derived = derivedMatchState({
+    teamAName: m.team_a_name,
+    teamBName: m.team_b_name,
+    inningsCount: m.innings_count,
+    players: bundle.players,
+    innings: bundle.innings,
+    deliveriesByInningsId: draft,
+    maxBallsPerOver: m.max_balls_per_over ?? 0,
+  });
+
+  const inningsPatches = bundle.innings.map((inn) => {
+    const next = derived.innings.find((d) => d.id === inn.id);
+    const dels = draft[inn.id] ?? [];
+    const lb = lastBowlingDelivery(dels);
+    return {
+      id: inn.id,
+      runs: next?.runs ?? inn.runs,
+      wickets: next?.wickets ?? inn.wickets,
+      balls_legal: next?.balls_legal ?? inn.balls_legal,
+      current_striker_id: next?.strikerId ?? inn.current_striker_id,
+      current_non_striker_id: next?.nonStrikerId ?? inn.current_non_striker_id,
+      current_bowler_id: lb?.bowler_id ?? inn.current_bowler_id ?? null,
+    };
+  });
+
+  const pName = (id: string | null | undefined) =>
+    bundle.players.find((p) => p.id === id)?.display_name ?? "—";
+  const historyEntry = buildSessionHistoryEntry({
+    actor: m.status === "completed" ? "Scorer (PIN unlocked)" : "Scorer",
+    base: bundle.deliveriesByInningsId,
+    ops: payload.operations,
+    name: pName,
+  });
+
+  const { error } = await sb().rpc("apply_match_edit", {
+    p_match_id: m.id,
+    p_expected_updated_at: m.updated_at,
+    p_expected_delivery_ids: deliveryIdsByInnings(bundle.deliveriesByInningsId),
+    p_delivery_patches: patches.map(deliveryPatch),
+    p_innings_patches: inningsPatches,
+    p_winner_side: derived.result.winnerSide,
+    p_result_summary: derived.result.summary,
+    p_update_result: m.status === "completed",
+    p_history_entry: historyEntry,
+  });
+
+  if (error) {
+    const msg = error.message ?? "";
+    if (/\bSTALE\b/.test(msg) || /\bIDENTITY\b/.test(msg)) {
+      throw new StaleMatchEditError();
+    }
+    if (/\bNOT_FOUND\b/.test(msg)) throw new Error("Match not found");
+    throw new Error(msg || "Could not apply draft");
+  }
+
+  if (m.status === "live") {
+    await maybeAutoFinishLiveMatch(writeToken, m);
+  }
+
+  return { ok: true as const };
 }
 
 /** Public helpers — server-only */

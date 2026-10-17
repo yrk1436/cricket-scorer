@@ -3,7 +3,7 @@
 import HudModal from "@/components/HudModal";
 import MatchEditMode from "@/components/MatchEditMode";
 import Scorecard from "@/components/Scorecard";
-import type { DeliveryEditInput } from "@/lib/recompute";
+import type { ApplyMatchEditPayload } from "@/lib/edit-draft";
 import type { SerialBundle } from "@/lib/scorecard-text";
 import { useCallback, useState } from "react";
 
@@ -80,17 +80,17 @@ export default function PublicMatchView({ bundle: initial }: Props) {
           setEditMode(false);
           setErr(null);
         }}
-        onSave={async (deliveryId, input: DeliveryEditInput) => {
+        onApply={async (payload: ApplyMatchEditPayload) => {
           setBusy(true);
           setErr(null);
           try {
-            const r = await fetch(`${apiRoot}/delivery/${deliveryId}`, {
-              method: "PATCH",
+            const r = await fetch(`${apiRoot}/edit-draft`, {
+              method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(input),
+              body: JSON.stringify(payload),
             });
             const j = await r.json();
-            if (!r.ok) throw new Error(j.error ?? "Could not save correction");
+            if (!r.ok) throw new Error(j.error ?? "Could not apply draft");
             await refreshWithToken(writeToken);
             return true;
           } catch (x) {

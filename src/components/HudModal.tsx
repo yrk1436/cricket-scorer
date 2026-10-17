@@ -9,6 +9,9 @@ type Props = {
   children: React.ReactNode;
   /** Tap backdrop to dismiss (optional modals only). */
   onBackdropClick?: () => void;
+  /** Escape key. Defaults to onBackdropClick. */
+  onEscape?: () => void;
+  panelClassName?: string;
 };
 
 /** Bottom-sheet on mobile; centered on larger screens. Portaled + scroll-locked. */
@@ -17,6 +20,8 @@ export default function HudModal({
   title,
   children,
   onBackdropClick,
+  onEscape,
+  panelClassName,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -41,6 +46,16 @@ export default function HudModal({
     panelRef.current?.focus();
   }, [open, title]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      (onEscape ?? onBackdropClick)?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onEscape, onBackdropClick]);
+
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
@@ -51,7 +66,7 @@ export default function HudModal({
     >
       <div
         ref={panelRef}
-        className="hud-panel hud-sheet"
+        className={`hud-panel hud-sheet${panelClassName ? ` ${panelClassName}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? "hud-title" : undefined}

@@ -1,0 +1,544 @@
+import { describe, expect, it } from "vitest";
+import {
+  assertApplyFreshness,
+  assertSameDeliveryIdentity,
+  buildApplyPayload,
+  changedDeliveries,
+  deliveryIdsByInnings,
+  describeDraftOps,
+  diffMatchScorecards,
+  replayDraftOps,
+  StaleMatchEditError,
+  validateDeliveryEdit,
+  validateDraftLogs,
+  validateInningsLog,
+  validateSwap,
+  type DraftOp,
+} from "./edit-draft";
+import { applyDeliveryEdit, derivedMatchState, type DeliveryEditInput } from "./recompute";
+import { computeInningsScorecard } from "./scorecard-stats";
+import type { DbDelivery, DbInnings, DbPlayer } from "./types";
+
+function makeDelivery(overrides: Partial<DbDelivery>): DbDelivery {
+  return {
+    id: "del-1",
+    innings_id: "inn-1",
+    display_order: 1,
+    striker_id: "bat-1",
+    non_striker_id: "bat-2",
+    bowler_id: "bowl-1",
+    is_strike_swap: false,
+    runs_off_bat: 0,
+    extra_wide: 0,
+    extra_nb: 0,
+    extra_byes: 0,
+    extra_leg_byes: 0,
+    counts_as_legal_delivery: true,
+    is_wicket: false,
+    dismissal: "none",
+    note: null,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makePlayers(): DbPlayer[] {
+  return [
+    { id: "bat-1", match_id: "m1", side: "a", display_name: "Ali", sort_order: 0, did_not_bat: false },
+    { id: "bat-2", match_id: "m1", side: "a", display_name: "Raj", sort_order: 1, did_not_bat: false },
+    { id: "bat-3", match_id: "m1", side: "a", display_name: "Sam", sort_order: 2, did_not_bat: false },
+    { id: "bowl-1", match_id: "m1", side: "b", display_name: "Kumar", sort_order: 0, did_not_bat: false },
+    { id: "bowl-2", match_id: "m1", side: "b", display_name: "Lee", sort_order: 1, did_not_bat: false },
+  ];
+}
+
+function inningsRow(overrides: Partial<DbInnings> = {}): DbInnings {
+  return {
+    id: "inn-1",
+    match_id: "m1",
+    index_num: 1,
+    batting_side: "a",
+    runs: 0,
+    wickets: 0,
+    balls_legal: 0,
+    completed: true,
+    current_striker_id: "bat-1",
+    current_non_striker_id: "bat-2",
+    current_bowler_id: "bowl-1",
+    ...overrides,
+  };
+}
+
+function baseEdit(over: Partial<DeliveryEditInput> = {}): DeliveryEditInput {
+  return {
+    strikerId: "bat-1",
+    nonStrikerId: "bat-2",
+    bowlerId: "bowl-1",
+    runsOffBat: 1,
+    extraType: "none",
+    extraRuns: 0,
+    isWicket: false,
+    dismissal: "none",
+    dismissedBatsmanId: null,
+    incomingStrikerId: null,
+    fielderId: null,
+    fielderAssistId: null,
+    ...over,
+  };
+}
+
+function nameOf(id: string | null | undefined) {
+  return makePlayers().find((p) => p.id === id)?.display_name ?? "—";
+}
+
+const THREE_BALLS = [
+  makeDelivery({ id: "d1", display_order: 1, runs_off_bat: 4, striker_id: "bat-1", non_striker_id: "bat-2" }),
+  makeDelivery({ id: "d2", display_order: 2, runs_off_bat: 1, striker_id: "bat-1", non_striker_id: "bat-2" }),
+  makeDelivery({ id: "d3", display_order: 3, runs_off_bat: 2, striker_id: "bat-2", non_striker_id: "bat-1" }),
+];
+
+describe("swap from a chosen ball onward", () => {
+  it("flips only that ball and later IDs; earlier balls stay put", () => {
+    const draft = replayDraftOps(
+      { "inn-1": THREE_BALLS },
+      [
+        {
+          kind: "swap",
+          deliveryId: "d2",
+          inningsId: "inn-1",
+          fromDisplayOrder: 2,
+          a: "bat-1",
+          b: "bat-2",
+        },
+      ],
+    )["inn-1"];
+
+    expect(draft[0].striker_id).toBe("bat-1");
+    expect(draft[0].non_striker_id).toBe("bat-2");
+    expect(draft[1].striker_id).toBe("bat-2");
+    expect(draft[1].non_striker_id).toBe("bat-1");
+    expect(draft[2].striker_id).toBe("bat-1");
+    expect(draft[2].non_striker_id).toBe("bat-2");
+
+    const card = computeInningsScorecard({
+      deliveries: draft,
+      battingSide: "a",
+      bowlingSide: "b",
+      players: makePlayers(),
+      name: nameOf,
+    });
+    expect(card.batting.find((r) => r.playerId === "bat-1")?.runs).toBe(6);
+    expect(card.batting.find((r) => r.playerId === "bat-2")?.runs).toBe(1);
+  });
+});
+
+describe("stacking draft ops", () => {
+  it("ball edit then swap matches applying both to a copy of the list", () => {
+    const ops: DraftOp[] = [
+      {
+        kind: "ball",
+        deliveryId: "d1",
+        inningsId: "inn-1",
+        input: baseEdit({ runsOffBat: 6 }),
+      },
+      {
+        kind: "swap",
+        deliveryId: "d2",
+        inningsId: "inn-1",
+        fromDisplayOrder: 2,
+        a: "bat-1",
+        b: "bat-2",
+      },
+    ];
+    const stacked = replayDraftOps({ "inn-1": THREE_BALLS }, ops)["inn-1"];
+
+    const afterBall = THREE_BALLS.map((d) =>
+      d.id === "d1" ? applyDeliveryEdit(d, baseEdit({ runsOffBat: 6 })) : { ...d },
+    );
+    const manual = replayDraftOps(
+      { "inn-1": afterBall },
+      [ops[1]],
+    )["inn-1"];
+
+    expect(stacked.map((d) => [d.id, d.striker_id, d.runs_off_bat])).toEqual(
+      manual.map((d) => [d.id, d.striker_id, d.runs_off_bat]),
+    );
+    expect(stacked[0].runs_off_bat).toBe(6);
+    expect(stacked[1].striker_id).toBe("bat-2");
+  });
+
+  it("swap then ball edit matches applying both to a copy of the list", () => {
+    const ops: DraftOp[] = [
+      {
+        kind: "swap",
+        deliveryId: "d2",
+        inningsId: "inn-1",
+        fromDisplayOrder: 2,
+        a: "bat-1",
+        b: "bat-2",
+      },
+      {
+        kind: "ball",
+        deliveryId: "d2",
+        inningsId: "inn-1",
+        input: baseEdit({
+          strikerId: "bat-2",
+          nonStrikerId: "bat-1",
+          runsOffBat: 3,
+        }),
+      },
+    ];
+    const stacked = replayDraftOps({ "inn-1": THREE_BALLS }, ops)["inn-1"];
+    expect(stacked[0].striker_id).toBe("bat-1");
+    expect(stacked[1].striker_id).toBe("bat-2");
+    expect(stacked[1].runs_off_bat).toBe(3);
+  });
+});
+
+describe("scorecard diff highlighting", () => {
+  it("highlights the batter, team total, and flipped result when runs 1 → 2", () => {
+    const inn1 = inningsRow({ id: "inn-1", index_num: 1, completed: true });
+    const inn2 = inningsRow({
+      id: "inn-2",
+      index_num: 2,
+      batting_side: "b",
+      completed: true,
+    });
+    const first = [
+      makeDelivery({ id: "a1", innings_id: "inn-1", display_order: 1, runs_off_bat: 4 }),
+    ];
+    const chase = [
+      makeDelivery({
+        id: "b1",
+        innings_id: "inn-2",
+        display_order: 1,
+        striker_id: "bowl-1",
+        non_striker_id: "bowl-2",
+        bowler_id: "bat-1",
+        runs_off_bat: 4,
+      }),
+    ];
+    const draftChase = replayDraftOps(
+      { "inn-1": first, "inn-2": chase },
+      [
+        {
+          kind: "ball",
+          deliveryId: "b1",
+          inningsId: "inn-2",
+          input: baseEdit({
+            strikerId: "bowl-1",
+            nonStrikerId: "bowl-2",
+            bowlerId: "bat-1",
+            runsOffBat: 6,
+          }),
+        },
+      ],
+    );
+
+    const diff = diffMatchScorecards({
+      teamAName: "Aces",
+      teamBName: "Bears",
+      inningsCount: 2,
+      players: makePlayers(),
+      innings: [inn1, inn2],
+      savedDeliveries: { "inn-1": first, "inn-2": chase },
+      draftDeliveries: draftChase,
+    });
+
+    expect(diff.result.changed).toBe(true);
+    expect(diff.hasScoreChange).toBe(true);
+    const chaseDiff = diff.innings.find((i) => i.inningsId === "inn-2")!;
+    expect(chaseDiff.totals.changed).toBe(true);
+    expect(chaseDiff.totals.before).toContain("4/0");
+    expect(chaseDiff.totals.after).toContain("6/0");
+    const kumar = chaseDiff.batting.find((r) => r.key === "bowl-1");
+    expect(kumar?.changed).toBe(true);
+    expect(kumar?.before).toContain("4 (1)");
+    expect(kumar?.after).toContain("6 (1)");
+
+    const firstDiff = diff.innings.find((i) => i.inningsId === "inn-1")!;
+    expect(firstDiff.bowling.every((r) => !r.changed)).toBe(true);
+  });
+
+  it("leaves unchanged bowlers quiet when only a batter's runs move", () => {
+    const dels = [
+      makeDelivery({ id: "d1", display_order: 1, runs_off_bat: 1, bowler_id: "bowl-1" }),
+      makeDelivery({ id: "d2", display_order: 2, runs_off_bat: 0, bowler_id: "bowl-2" }),
+    ];
+    const draft = replayDraftOps(
+      { "inn-1": dels },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d1",
+          inningsId: "inn-1",
+          input: baseEdit({ runsOffBat: 2 }),
+        },
+      ],
+    );
+    const diff = diffMatchScorecards({
+      teamAName: "A",
+      teamBName: "B",
+      inningsCount: 1,
+      players: makePlayers(),
+      innings: [inningsRow()],
+      savedDeliveries: { "inn-1": dels },
+      draftDeliveries: draft,
+    });
+    const bowl = diff.innings[0].bowling.find((r) => r.key === "bowl-1");
+    expect(bowl?.changed).toBe(true);
+    expect(bowl?.before).toBe("0-1 (0.1)");
+    expect(bowl?.after).toBe("0-2 (0.1)");
+    expect(diff.innings[0].bowling.filter((r) => r.key !== "bowl-1").every((r) => !r.changed)).toBe(
+      true,
+    );
+  });
+});
+
+describe("validation", () => {
+  it("rejects the same person as striker and non-striker", () => {
+    const delivery = makeDelivery({ runs_off_bat: 1 });
+    expect(
+      validateDeliveryEdit({
+        delivery,
+        input: baseEdit({ strikerId: "bat-1", nonStrikerId: "bat-1" }),
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toMatch(/different people/i);
+
+    const bad = applyDeliveryEdit(
+      delivery,
+      baseEdit({ strikerId: "bat-1", nonStrikerId: "bat-1" }),
+    );
+    expect(
+      validateInningsLog({
+        deliveries: [bad],
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toMatch(/different people/i);
+  });
+
+  it("rejects a dismissed batter returning later", () => {
+    const dels = [
+      makeDelivery({
+        id: "d1",
+        display_order: 1,
+        is_wicket: true,
+        dismissal: "bowled",
+        dismissed_batsman_id: "bat-1",
+        incoming_striker_id: "bat-3",
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+      }),
+      makeDelivery({
+        id: "d2",
+        display_order: 2,
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+        runs_off_bat: 1,
+      }),
+    ];
+    expect(
+      validateInningsLog({
+        deliveries: dels,
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toMatch(/cannot appear again/i);
+  });
+
+  it("allows a retired-not-out batter to return later", () => {
+    const dels = [
+      makeDelivery({
+        id: "d1",
+        display_order: 1,
+        is_wicket: true,
+        dismissal: "retired_hurt",
+        counts_as_legal_delivery: false,
+        bowler_id: null,
+        dismissed_batsman_id: "bat-1",
+        incoming_striker_id: "bat-3",
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+      }),
+      makeDelivery({
+        id: "d2",
+        display_order: 2,
+        striker_id: "bat-1",
+        non_striker_id: "bat-2",
+        runs_off_bat: 1,
+      }),
+    ];
+    expect(
+      validateInningsLog({
+        deliveries: dels,
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a swap of the same batter or a special row", () => {
+    expect(
+      validateSwap({
+        delivery: makeDelivery({}),
+        a: "bat-1",
+        b: "bat-1",
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toMatch(/two different/i);
+
+    expect(
+      validateSwap({
+        delivery: makeDelivery({ is_strike_swap: true }),
+        a: "bat-1",
+        b: "bat-2",
+        battingSide: "a",
+        players: makePlayers(),
+      }),
+    ).toMatch(/strike-swap/i);
+  });
+});
+
+describe("apply payload identity and stale writes", () => {
+  it("keeps the same ball ids and order after replay", () => {
+    const base = { "inn-1": THREE_BALLS };
+    const draft = replayDraftOps(base, [
+      {
+        kind: "ball",
+        deliveryId: "d2",
+        inningsId: "inn-1",
+        input: baseEdit({ runsOffBat: 2 }),
+      },
+      {
+        kind: "swap",
+        deliveryId: "d3",
+        inningsId: "inn-1",
+        fromDisplayOrder: 3,
+        a: "bat-1",
+        b: "bat-2",
+      },
+    ]);
+    const payload = buildApplyPayload({
+      expectedUpdatedAt: "2026-10-16T14:00:00.000Z",
+      deliveriesByInningsId: base,
+      operations: [],
+    });
+    expect(payload.expectedDeliveryIdsByInningsId).toEqual({
+      "inn-1": ["d1", "d2", "d3"],
+    });
+    expect(deliveryIdsByInnings(draft)).toEqual(payload.expectedDeliveryIdsByInningsId);
+    expect(() =>
+      assertSameDeliveryIdentity(
+        payload.expectedDeliveryIdsByInningsId,
+        deliveryIdsByInnings(draft),
+      ),
+    ).not.toThrow();
+    expect(changedDeliveries(base, draft).map((d) => d.id).sort()).toEqual(["d2", "d3"]);
+  });
+
+  it("rejects a missing or extra delivery id", () => {
+    expect(() =>
+      assertSameDeliveryIdentity({ "inn-1": ["d1", "d2"] }, { "inn-1": ["d1"] }),
+    ).toThrow(/same ball ids and order/i);
+    expect(() =>
+      assertSameDeliveryIdentity({ "inn-1": ["d1", "d2"] }, { "inn-1": ["d1", "d2", "d3"] }),
+    ).toThrow(/same ball ids and order/i);
+    expect(() =>
+      assertSameDeliveryIdentity({ "inn-1": ["d1", "d2"] }, { "inn-1": ["d2", "d1"] }),
+    ).toThrow(/same ball ids and order/i);
+  });
+
+  it("rejects a stale updated_at and does not treat the draft as writable", () => {
+    const ids = { "inn-1": ["d1", "d2"] };
+    expect(() =>
+      assertApplyFreshness({
+        expectedUpdatedAt: "2026-10-16T14:00:00.000Z",
+        actualUpdatedAt: "2026-10-16T15:00:00.000Z",
+        expectedIds: ids,
+        actualIds: ids,
+      }),
+    ).toThrow(StaleMatchEditError);
+
+    expect(() =>
+      assertApplyFreshness({
+        expectedUpdatedAt: "2026-10-16T14:00:00.000Z",
+        actualUpdatedAt: "2026-10-16T14:00:00.000Z",
+        expectedIds: ids,
+        actualIds: { "inn-1": ["d1", "d2", "d-new"] },
+      }),
+    ).toThrow(StaleMatchEditError);
+  });
+
+  it("accepts the same timestamp and identity", () => {
+    expect(() =>
+      assertApplyFreshness({
+        expectedUpdatedAt: "2026-10-16T14:00:00.000Z",
+        actualUpdatedAt: "2026-10-16T14:00:00.000+00:00",
+        expectedIds: { "inn-1": ["d1"] },
+        actualIds: { "inn-1": ["d1"] },
+      }),
+    ).not.toThrow();
+  });
+
+  it("describes stacked ops for one session history line", () => {
+    const described = describeDraftOps(
+      { "inn-1": THREE_BALLS },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d1",
+          inningsId: "inn-1",
+          input: baseEdit({ runsOffBat: 6 }),
+        },
+        {
+          kind: "swap",
+          deliveryId: "d2",
+          inningsId: "inn-1",
+          fromDisplayOrder: 2,
+          a: "bat-1",
+          b: "bat-2",
+        },
+      ],
+      nameOf,
+    );
+    expect(described.summary).toBe("1 ball edit, 1 batter swap");
+    expect(described.operations[0].summary).toMatch(/Ali/);
+    expect(described.operations[0].summary).toMatch(/4 → 6/);
+    expect(described.operations[1].summary).toMatch(/swap Ali ↔ Raj from here onward/);
+  });
+
+  it("keeps validation passing for a legal stacked draft", () => {
+    const draft = replayDraftOps(
+      { "inn-1": THREE_BALLS },
+      [
+        {
+          kind: "ball",
+          deliveryId: "d1",
+          inningsId: "inn-1",
+          input: baseEdit({ runsOffBat: 2 }),
+        },
+      ],
+    );
+    expect(
+      validateDraftLogs({
+        innings: [inningsRow()],
+        players: makePlayers(),
+        deliveriesByInningsId: draft,
+      }),
+    ).toBeNull();
+    expect(
+      derivedMatchState({
+        teamAName: "A",
+        teamBName: "B",
+        inningsCount: 1,
+        players: makePlayers(),
+        innings: [inningsRow()],
+        deliveriesByInningsId: draft,
+      }).innings[0].runs,
+    ).toBe(5);
+  });
+});

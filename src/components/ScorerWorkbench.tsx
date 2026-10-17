@@ -11,7 +11,7 @@ import PickerField, { PickerGroup } from "@/components/scorer/PickerField";
 import ScoringPad from "@/components/scorer/ScoringPad";
 import CompletedMatchView from "@/components/CompletedMatchView";
 import MatchEditMode from "@/components/MatchEditMode";
-import type { DeliveryEditInput } from "@/lib/recompute";
+import type { ApplyMatchEditPayload } from "@/lib/edit-draft";
 import ReplaceBatterHud from "@/components/ReplaceBatterHud";
 import WicketHud from "@/components/scorer/WicketHud";
 import IncomingBatterHud from "@/components/IncomingBatterHud";
@@ -566,15 +566,15 @@ export default function ScorerWorkbench({
           setEditMode(false);
           setErr(null);
         }}
-        onSave={async (deliveryId, input: DeliveryEditInput) => {
+        onApply={async (payload: ApplyMatchEditPayload) => {
           return exec(async () => {
-            const r = await fetch(`${apiRoot}/delivery/${deliveryId}`, {
-              method: "PATCH",
+            const r = await fetch(`${apiRoot}/edit-draft`, {
+              method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(input),
+              body: JSON.stringify(payload),
             });
             const j = await r.json();
-            if (!r.ok) throw new Error(j.error ?? "Could not save correction");
+            if (!r.ok) throw new Error(j.error ?? "Could not apply draft");
           });
         }}
       />
